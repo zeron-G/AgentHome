@@ -56,7 +56,7 @@ class GameLoop:
         self.world.god.pending_commands.append(cmd)
 
     def handle_control(self, cmd: dict):
-        """Handle game control commands (pause/resume/set_limit)."""
+        """Handle game control commands (pause/resume/set_limit/set_api_key)."""
         command = cmd.get("command", "")
         if command == "pause":
             self.token_tracker._paused = True
@@ -65,6 +65,16 @@ class GameLoop:
         elif command == "set_limit":
             new_limit = int(cmd.get("value", config.DEFAULT_TOKEN_LIMIT))
             self.token_tracker.set_limit(new_limit)
+        elif command == "set_api_key":
+            new_key = cmd.get("value", "").strip()
+            if new_key:
+                self.update_api_key(new_key)
+
+    def update_api_key(self, new_key: str):
+        """Hot-reload the Gemini API key for all agents."""
+        config.GEMINI_API_KEY = new_key
+        self.npc_agent.update_api_key(new_key)
+        self.god_agent.update_api_key(new_key)
 
     # ── World tick loop ───────────────────────────────────────────────────────
 

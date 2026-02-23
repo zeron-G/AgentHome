@@ -5,7 +5,7 @@ load_dotenv()
 
 # LLM
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # World
 WORLD_WIDTH: int = 20
@@ -32,3 +32,19 @@ DEFAULT_TOKEN_LIMIT: int = 200_000
 # LLM generation
 LLM_TEMPERATURE: float = 0.85
 LLM_MAX_TOKENS: int = 1024
+
+# Town & Exchange
+TOWN_X: int = 9            # town area top-left corner X
+TOWN_Y: int = 9            # town area top-left corner Y
+EXCHANGE_X: int = 10       # exchange building tile X
+EXCHANGE_Y: int = 10       # exchange building tile Y
+
+# Exchange rates (resources → gold)
+EXCHANGE_RATE_WOOD: int = 1    # 1 gold per wood
+EXCHANGE_RATE_STONE: int = 2   # 2 gold per stone
+EXCHANGE_RATE_ORE: int = 5     # 5 gold per ore
+FOOD_COST_GOLD: int = 3        # 3 gold per food purchased
+
+# Energy restoration
+FOOD_ENERGY_RESTORE: int = 30  # energy restored by eating 1 food
+SLEEP_ENERGY_RESTORE: int = 50 # energy restored by sleeping

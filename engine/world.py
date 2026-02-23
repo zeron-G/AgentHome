@@ -14,6 +14,7 @@ class TileType(str, Enum):
     WATER = "water"
     ROCK = "rock"
     FOREST = "forest"
+    TOWN = "town"
 
 
 class WeatherType(str, Enum):
@@ -26,6 +27,7 @@ class ResourceType(str, Enum):
     WOOD = "wood"
     STONE = "stone"
     ORE = "ore"
+    FOOD = "food"
 
 
 @dataclass
@@ -42,6 +44,7 @@ class Tile:
     tile_type: TileType
     resource: Optional[Resource] = None
     npc_ids: list = field(default_factory=list)
+    is_exchange: bool = False   # marks the exchange building tile
 
 
 @dataclass
@@ -80,6 +83,8 @@ class Inventory:
     wood: int = 0
     stone: int = 0
     ore: int = 0
+    food: int = 0
+    gold: int = 0
 
     def get(self, item: str) -> int:
         return getattr(self, item, 0)
@@ -199,29 +204,32 @@ def create_world(seed: int = 42) -> World:
         for y in range(height)
     ]
 
-    # Water: central lake + a winding river
-    lake_cx, lake_cy = width // 2, height // 2
-    _place_cluster(tiles, width, height, TileType.WATER, lake_cx, lake_cy, 2)
-    # Small rivers branching from lake
-    for _ in range(3):
-        cx, cy = lake_cx, lake_cy
-        for _ in range(rng.randint(3, 6)):
-            cx += rng.randint(-2, 2)
-            cy += rng.randint(-2, 2)
-            cx = max(1, min(width - 2, cx))
-            cy = max(1, min(height - 2, cy))
-            _place_cluster(tiles, width, height, TileType.WATER, cx, cy, 1)
-
-    # Rock clusters (4 patches)
-    rock_centers = [(4, 4), (15, 4), (4, 15), (15, 15)]
+    # Rock clusters (4 patches near corners)
+    rock_centers = [(3, 3), (16, 3), (3, 16), (16, 16)]
     for rcx, rcy in rock_centers:
         _place_cluster(tiles, width, height, TileType.ROCK, rcx, rcy, rng.randint(2, 3))
 
-    # Forest patches (scattered)
-    for _ in range(6):
-        fcx = rng.randint(2, width - 3)
-        fcy = rng.randint(2, height - 3)
+    # Forest patches (scattered, avoid town area 8-12, 8-12)
+    forest_attempts = 0
+    forests_placed = 0
+    while forests_placed < 8 and forest_attempts < 50:
+        forest_attempts += 1
+        fcx = rng.randint(1, width - 2)
+        fcy = rng.randint(1, height - 2)
+        # Avoid town center area
+        if 7 <= fcx <= 13 and 7 <= fcy <= 13:
+            continue
         _place_cluster(tiles, width, height, TileType.FOREST, fcx, fcy, rng.randint(1, 3))
+        forests_placed += 1
+
+    # ── Town area: 3×3 at (9,9)–(11,11) ──────────────────────────────────────
+    for ty in range(9, 12):
+        for tx in range(9, 12):
+            tiles[ty][tx].tile_type = TileType.TOWN
+            tiles[ty][tx].resource = None
+
+    # Mark exchange building at center of town
+    tiles[config.EXCHANGE_Y][config.EXCHANGE_X].is_exchange = True
 
     # Add resources to tiles
     for row in tiles:
@@ -239,8 +247,21 @@ def create_world(seed: int = 42) -> World:
                         qty = rng.randint(4, 10)
                         tile.resource = Resource(ResourceType.STONE, qty, 10)
 
-    # Ensure NPC spawn points are on grass
-    spawn_points = [(3, 3), (16, 3), (3, 16), (16, 16)]
+    # Scatter food bushes on grass tiles (about 10 spots)
+    food_placed = 0
+    food_attempts = 0
+    while food_placed < 10 and food_attempts < 200:
+        food_attempts += 1
+        fx = rng.randint(0, width - 1)
+        fy = rng.randint(0, height - 1)
+        t = tiles[fy][fx]
+        if t.tile_type == TileType.GRASS and t.resource is None:
+            qty = rng.randint(2, 5)
+            t.resource = Resource(ResourceType.FOOD, qty, 5)
+            food_placed += 1
+
+    # Ensure NPC spawn points are on grass (closer to town)
+    spawn_points = [(5, 5), (14, 5), (5, 14), (14, 14)]
     for sx, sy in spawn_points:
         tiles[sy][sx].tile_type = TileType.GRASS
         tiles[sy][sx].resource = None
@@ -250,29 +271,29 @@ def create_world(seed: int = 42) -> World:
         NPC(
             npc_id="npc_alice",
             name="Alice",
-            x=3, y=3,
-            personality="好奇心旺盛，喜欢探索和收集矿石，话多且友善，总是充满热情",
+            x=5, y=5,
+            personality="好奇心旺盛，喜欢探索和收集矿石，话多且友善，总是充满热情，喜欢主动找人聊天",
             color="#4CAF50",
         ),
         NPC(
             npc_id="npc_bob",
             name="Bob",
-            x=16, y=3,
-            personality="沉稳可靠，擅长采集木材，是个精明的交易者，说话简洁",
+            x=14, y=5,
+            personality="沉稳可靠，擅长采集木材，是个精明的交易者，善于在交易所买卖资源，说话简洁但直接",
             color="#2196F3",
         ),
         NPC(
             npc_id="npc_carol",
             name="Carol",
-            x=3, y=16,
-            personality="聪明机智，善于观察和分析，喜欢策略，偶尔有点神秘",
+            x=5, y=14,
+            personality="聪明机智，善于观察和分析，喜欢去交易所囤积金币，偶尔有点神秘，喜欢评论他人行为",
             color="#FFC107",
         ),
         NPC(
             npc_id="npc_dave",
             name="Dave",
-            x=16, y=16,
-            personality="勤劳踏实，专注采集石头，效率极高，话不多但行动力强",
+            x=14, y=14,
+            personality="勤劳踏实，专注采集石头和矿石，效率极高，会定期去交易所换金币买食物补充体力",
             color="#F44336",
         ),
     ]

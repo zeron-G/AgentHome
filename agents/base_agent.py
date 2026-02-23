@@ -21,7 +21,19 @@ class BaseAgent:
     def __init__(self, agent_id: str, token_tracker: TokenTracker):
         self.agent_id = agent_id
         self.token_tracker = token_tracker
-        self._client = genai.Client(api_key=config.GEMINI_API_KEY)
+        self._api_key: str = config.GEMINI_API_KEY
+        self._client: Optional[genai.Client] = None  # lazy init
+
+    def _get_client(self) -> genai.Client:
+        """Return (or create) the Gemini client."""
+        if self._client is None:
+            self._client = genai.Client(api_key=self._api_key)
+        return self._client
+
+    def update_api_key(self, new_key: str):
+        """Hot-reload the API key; forces client re-creation on next call."""
+        self._api_key = new_key
+        self._client = None
 
     async def call_llm(
         self,
@@ -60,7 +72,8 @@ class BaseAgent:
         )
 
         try:
-            response = await self._client.aio.models.generate_content(
+            client = self._get_client()
+            response = await client.aio.models.generate_content(
                 model=config.MODEL_NAME,
                 contents=contents,
                 config=gen_config,

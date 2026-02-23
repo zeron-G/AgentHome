@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 from typing import Optional
 
+import config
 from engine.world import (
     GodEntity, Inventory, NPC, Resource, ResourceType,
     TileType, WeatherType, World,
@@ -37,6 +38,11 @@ class WorldManager:
             if phase == "dawn":
                 npc.energy = min(100, npc.energy + 1)
 
+            # Auto-eat if starving (energy == 0 and has food)
+            if npc.energy == 0 and npc.inventory.food > 0:
+                npc.inventory.food -= 1
+                npc.energy = min(100, npc.energy + config.FOOD_ENERGY_RESTORE)
+
         # Resource regrowth (slow, every 10 ticks)
         if tick % 10 == 0:
             for row in world.tiles:
@@ -46,6 +52,18 @@ class WorldManager:
                         tile.resource.quantity = min(
                             tile.resource.max_quantity,
                             tile.resource.quantity + regrow,
+                        )
+
+        # Food bush regrowth (slower, every 15 ticks)
+        if tick % 15 == 0:
+            for row in world.tiles:
+                for tile in row:
+                    if (tile.resource and
+                            tile.resource.resource_type == ResourceType.FOOD and
+                            tile.resource.quantity < tile.resource.max_quantity):
+                        tile.resource.quantity = min(
+                            tile.resource.max_quantity,
+                            tile.resource.quantity + 1,
                         )
 
     # ── NPC actions ───────────────────────────────────────────────────────────
@@ -77,6 +95,18 @@ class WorldManager:
             if note:
                 npc.memory.add_note(note)
             npc.last_action = "think"
+
+        elif action_type == "eat":
+            events.extend(self._do_eat(npc, world, tick))
+
+        elif action_type == "sleep":
+            events.extend(self._do_sleep(npc, world, tick))
+
+        elif action_type == "exchange":
+            events.extend(self._do_exchange(npc, action, world, tick))
+
+        elif action_type == "buy_food":
+            events.extend(self._do_buy_food(npc, action, world, tick))
 
         else:
             npc.last_action = "idle"
@@ -125,10 +155,19 @@ class WorldManager:
         if not tile or not tile.resource or tile.resource.quantity <= 0:
             return []
 
+        rtype = tile.resource.resource_type
+        # Cannot gather from exchange/town tiles
+        if tile.tile_type == TileType.TOWN:
+            return []
+
         amount = min(2, tile.resource.quantity)
         tile.resource.quantity -= amount
-        rtype = tile.resource.resource_type
-        npc.inventory.set(rtype.value, npc.inventory.get(rtype.value) + amount)
+
+        if rtype == ResourceType.FOOD:
+            npc.inventory.food = npc.inventory.food + amount
+        else:
+            npc.inventory.set(rtype.value, npc.inventory.get(rtype.value) + amount)
+
         npc.energy = max(0, npc.energy - 5)
         npc.last_action = "gather"
 
@@ -225,6 +264,109 @@ class WorldManager:
             },
         )]
 
+    def _do_eat(self, npc: NPC, world: World, tick: int) -> list[WorldEvent]:
+        if npc.inventory.food <= 0:
+            return []
+        npc.inventory.food -= 1
+        restore = config.FOOD_ENERGY_RESTORE
+        npc.energy = min(100, npc.energy + restore)
+        npc.last_action = "eat"
+        return [WorldEvent(
+            event_type=EventType.NPC_ATE,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=2,
+            payload={"amount": restore},
+        )]
+
+    def _do_sleep(self, npc: NPC, world: World, tick: int) -> list[WorldEvent]:
+        restore = config.SLEEP_ENERGY_RESTORE
+        npc.energy = min(100, npc.energy + restore)
+        npc.last_action = "sleep"
+        return [WorldEvent(
+            event_type=EventType.NPC_SLEPT,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=2,
+            payload={"amount": restore},
+        )]
+
+    def _do_exchange(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Exchange resources for gold at the exchange building."""
+        tile = world.get_tile(npc.x, npc.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        item = action.get("exchange_item", "")
+        qty = int(action.get("exchange_qty", 0) or 0)
+        if not item or qty <= 0:
+            return []
+
+        rates = {
+            "wood": config.EXCHANGE_RATE_WOOD,
+            "stone": config.EXCHANGE_RATE_STONE,
+            "ore": config.EXCHANGE_RATE_ORE,
+        }
+        if item not in rates:
+            return []
+
+        npc_has = npc.inventory.get(item)
+        if npc_has < qty:
+            qty = npc_has  # exchange what we have
+        if qty <= 0:
+            return []
+
+        gold_earned = qty * rates[item]
+        npc.inventory.set(item, npc_has - qty)
+        npc.inventory.gold += gold_earned
+        npc.last_action = "exchange"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_EXCHANGED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=4,
+            payload={"item": item, "qty": qty, "gold": gold_earned},
+        )]
+
+    def _do_buy_food(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Buy food with gold at the exchange building."""
+        tile = world.get_tile(npc.x, npc.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        qty = int(action.get("quantity", 1) or 1)
+        qty = max(1, qty)
+        cost = qty * config.FOOD_COST_GOLD
+
+        if npc.inventory.gold < cost:
+            # Buy as many as we can afford
+            qty = npc.inventory.gold // config.FOOD_COST_GOLD
+            cost = qty * config.FOOD_COST_GOLD
+
+        if qty <= 0:
+            return []
+
+        npc.inventory.gold -= cost
+        npc.inventory.food += qty
+        npc.last_action = "buy_food"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_BOUGHT_FOOD,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=4,
+            payload={"qty": qty, "gold_spent": cost},
+        )]
+
     # ── God actions ───────────────────────────────────────────────────────────
 
     def apply_god_action(self, action: dict, world: World) -> list[WorldEvent]:
@@ -256,10 +398,15 @@ class WorldManager:
             commentary = action.get("commentary", "")
 
             tile = world.get_tile(x, y)
-            if tile and tile.tile_type not in (TileType.WATER,):
+            if tile and tile.tile_type not in (TileType.WATER, TileType.TOWN):
                 try:
                     rtype = ResourceType(rtype_str)
-                    max_qty = 10 if rtype != ResourceType.ORE else 5
+                    if rtype == ResourceType.ORE:
+                        max_qty = 5
+                    elif rtype == ResourceType.FOOD:
+                        max_qty = 5
+                    else:
+                        max_qty = 10
                     tile.resource = Resource(rtype, min(qty, max_qty), max_qty)
                     world.god.last_commentary = commentary
 

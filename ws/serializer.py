@@ -1,9 +1,24 @@
 """Convert World state to JSON-serializable dict for WebSocket broadcast."""
 from __future__ import annotations
 
-from engine.world import World
+from engine.world import ResourceType, TileType, World
 from game.events import WorldEvent
 from game.token_tracker import TokenTracker
+
+# Compact single-letter codes
+_TILE_LETTER = {
+    TileType.GRASS: "g",
+    TileType.WATER: "w",
+    TileType.ROCK: "r",
+    TileType.FOREST: "f",
+    TileType.TOWN: "o",
+}
+_RESOURCE_LETTER = {
+    ResourceType.WOOD: "w",
+    ResourceType.STONE: "s",
+    ResourceType.ORE: "o",
+    ResourceType.FOOD: "f",
+}
 
 
 class WorldSerializer:
@@ -40,14 +55,16 @@ class WorldSerializer:
                 t: dict = {
                     "x": tile.x,
                     "y": tile.y,
-                    "t": tile.tile_type.value[0],  # g/w/r/f (first letter)
+                    "t": _TILE_LETTER.get(tile.tile_type, "g"),
                 }
                 if tile.resource and tile.resource.quantity > 0:
-                    t["r"] = tile.resource.resource_type.value[0]  # w/s/o
+                    t["r"] = _RESOURCE_LETTER.get(tile.resource.resource_type, "?")
                     t["q"] = tile.resource.quantity
                     t["mq"] = tile.resource.max_quantity
                 if tile.npc_ids:
                     t["n"] = tile.npc_ids
+                if tile.is_exchange:
+                    t["e"] = 1
                 result.append(t)
         return result
 
@@ -63,6 +80,8 @@ class WorldSerializer:
                 "wood": npc.inventory.wood,
                 "stone": npc.inventory.stone,
                 "ore": npc.inventory.ore,
+                "food": npc.inventory.food,
+                "gold": npc.inventory.gold,
             },
             "last_action": npc.last_action,
             "last_message": npc.last_message,

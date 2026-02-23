@@ -12,11 +12,11 @@ import config
 
 class NPCAction(BaseModel):
     """Flexible NPC action schema. Only relevant fields are used per action."""
-    action: str  # move | gather | talk | trade | rest | think | interrupt
+    action: str  # move | gather | talk | trade | rest | think | interrupt | eat | sleep | exchange | buy_food
     # move
     dx: Optional[int] = None
     dy: Optional[int] = None
-    # move / gather / rest
+    # move / gather / rest / eat / sleep
     thought: Optional[str] = None
     # talk / interrupt
     message: Optional[str] = None
@@ -28,13 +28,18 @@ class NPCAction(BaseModel):
     request_qty: Optional[int] = None
     # think
     note: Optional[str] = None
+    # exchange
+    exchange_item: Optional[str] = None  # wood/stone/ore
+    exchange_qty: Optional[int] = None
+    # buy_food
+    quantity: Optional[int] = None
 
 
 class GodAction(BaseModel):
     """God action schema."""
     action: str  # set_weather | spawn_resource
     weather: Optional[str] = None       # sunny | rainy | storm
-    resource_type: Optional[str] = None # wood | stone | ore
+    resource_type: Optional[str] = None # wood | stone | ore | food
     x: Optional[int] = None
     y: Optional[int] = None
     quantity: Optional[int] = None
@@ -49,34 +54,52 @@ NPC_SYSTEM_PROMPT = """你是{name}，一个生活在2D沙盒世界里的NPC。
 
 【世界规则】
 - 世界是{width}x{height}的格子地图（坐标从0开始）
-- 地块类型：草地(grass)、森林(forest)、岩石(rock)、水域(water，不可通行)
-- 资源：木头(wood，来自森林)、石头(stone，来自岩石)、矿石(ore，来自岩石)
-- 你每次可向任意方向移动1格(dx/dy取-1,0,1)，不能进入水域
+- 地块类型：草地(grass)、森林(forest)、岩石(rock)、城镇(town)
+- 资源：木头(wood，来自森林)、石头(stone，来自岩石)、矿石(ore，来自岩石)、食物(food，草地上的灌木丛)
+- 你每次可向任意方向移动1格(dx/dy取-1,0,1)
 - 在有资源的地块可以采集(gather)，每次获得约2个
 - 在5格范围内可以和其他NPC说话(talk)，在1格范围内可以交易(trade)
-- rest可回复20点体力，能量降至0时行动力下降
+- rest可回复20点体力，sleep可回复50点体力
+- eat：消耗1个库存食物，回复30点体力（需先采集食物或购买）
 - think可记录个人笔记（只有你自己能看到）
 - 交易时只能给出自己实际拥有的物品
+
+【城镇与交易所】
+- 城镇中心有一个交易所，位于({exchange_x},{exchange_y})
+- 站在交易所地块时可以：
+  - exchange：用资源换金币（木头=1金/个，石头=2金/个，矿石=5金/个）
+  - buy_food：花3金购买1个食物（quantity字段指定购买数量）
+- 金币只能在交易所获得，可以买食物补充体力
+
+【社交行为要求】
+- 你是有个性的角色，要主动与周围NPC互动
+- 看到其他NPC时，要经常说话、打招呼、聊天、询问物品情况
+- 可以谈论天气、资源位置、你的计划等
+- 不要总是独自行动，多交流是重要的
 
 【动作格式】必须返回且只返回一个合法的JSON对象：
 - 移动：{{"action":"move","dx":整数,"dy":整数,"thought":"内心想法"}}
 - 采集：{{"action":"gather","thought":"内心想法"}}
 - 说话：{{"action":"talk","message":"要说的话（1-2句）","target_id":"目标npc_id或null"}}
 - 打断：{{"action":"interrupt","message":"打断对方说的话","target_id":"目标npc_id"}}
-- 交易：{{"action":"trade","target_id":"目标npc_id","offer_item":"wood/stone/ore","offer_qty":数量,"request_item":"wood/stone/ore","request_qty":数量}}
+- 交易：{{"action":"trade","target_id":"目标npc_id","offer_item":"wood/stone/ore/food/gold","offer_qty":数量,"request_item":"wood/stone/ore/food/gold","request_qty":数量}}
 - 休息：{{"action":"rest","thought":"内心想法"}}
+- 睡觉：{{"action":"sleep","thought":"内心想法"}}
+- 吃东西：{{"action":"eat","thought":"内心想法"}}
 - 思考：{{"action":"think","note":"要记录的笔记"}}
+- 在交易所换金币：{{"action":"exchange","exchange_item":"wood/stone/ore","exchange_qty":数量}}
+- 在交易所买食物：{{"action":"buy_food","quantity":数量}}
 
-说话要简短自然（1-2句），像真实对话。要有策略性和个性。"""
+说话要简短自然（1-2句），像真实对话。要有策略性和个性。要积极主动。"""
 
 
 # ── NPC context template (social mode - nearby NPCs or inbox) ─────────────────
 
 NPC_CONTEXT_SOCIAL = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weather}) ===
 位置: ({x},{y})  体力: {energy}/100
-背包: 木头={wood}, 石头={stone}, 矿石={ore}
+背包: 木头={wood}, 石头={stone}, 矿石={ore}, 食物={food}, 金币={gold}
 当前地块: {tile_type}  资源: {resource_info}
-
+{exchange_hint}
 附近的NPC ({radius}格内):
 {nearby_npcs}
 
@@ -96,9 +119,9 @@ NPC_CONTEXT_SOCIAL = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weath
 
 NPC_CONTEXT_ALONE = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weather}) ===
 位置: ({x},{y})  体力: {energy}/100
-背包: 木头={wood}, 石头={stone}, 矿石={ore}
+背包: 木头={wood}, 石头={stone}, 矿石={ore}, 食物={food}, 金币={gold}
 当前地块: {tile_type}  资源: {resource_info}
-
+{exchange_hint}
 周围没有其他NPC。
 
 === 你的个人笔记 ===
@@ -107,7 +130,7 @@ NPC_CONTEXT_ALONE = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weathe
 === 近期可见事件 ===
 {recent_events}
 
-你独处一隅，可以探索、采集、休息或记录想法。返回一个JSON动作。"""
+你独处一隅，可以探索、采集、去交易所、休息或记录想法。返回一个JSON动作。"""
 
 
 # ── God system prompt ─────────────────────────────────────────────────────────
@@ -119,12 +142,12 @@ GOD_SYSTEM_PROMPT = """你是这个世界的神明。
 【能力与限制】
 - 你不能与NPC交流，NPC感知不到你的存在
 - 你可以改变天气：晴天(sunny)、雨天(rainy)、暴风(storm)
-- 你可以在指定位置刷新资源：木头(wood)、石头(stone)、矿石(ore)
+- 你可以在指定位置刷新资源：木头(wood)、石头(stone)、矿石(ore)、食物(food)
 - 你的commentary是你的神明旁白，富有诗意，展示你的观点
 
 【动作格式】必须返回一个JSON：
 - 改变天气：{{"action":"set_weather","weather":"sunny/rainy/storm","commentary":"旁白"}}
-- 刷新资源：{{"action":"spawn_resource","resource_type":"wood/stone/ore","x":坐标,"y":坐标,"quantity":数量,"commentary":"旁白"}}
+- 刷新资源：{{"action":"spawn_resource","resource_type":"wood/stone/ore/food","x":坐标,"y":坐标,"quantity":数量,"commentary":"旁白"}}
 
 每次决策都要有深刻的理由。旁白要有神性、诗意、简短（1-2句）。"""
 
@@ -150,6 +173,8 @@ def build_npc_system_prompt(npc, world) -> str:
         personality=npc.personality,
         width=world.width,
         height=world.height,
+        exchange_x=config.EXCHANGE_X,
+        exchange_y=config.EXCHANGE_Y,
     )
 
 
@@ -164,6 +189,11 @@ def build_npc_context(npc, world) -> tuple[str, bool]:
         r = tile.resource
         resource_info = f"{r.resource_type.value} x{r.quantity}"
 
+    # Exchange hint
+    exchange_hint = ""
+    if tile and tile.is_exchange:
+        exchange_hint = "★ 你正站在交易所！可以用exchange换金币，或用buy_food购买食物。\n"
+
     notes_str = "\n".join(f"- {n}" for n in npc.memory.personal_notes) or "（暂无）"
     inbox_str = "\n".join(f"- {m}" for m in npc.memory.inbox) or "（无新消息）"
 
@@ -175,7 +205,7 @@ def build_npc_context(npc, world) -> tuple[str, bool]:
 
     nearby_str = "\n".join(
         f"- {n.name}({n.npc_id}) 位于({n.x},{n.y}) "
-        f"背包:木头{n.inventory.wood}/石头{n.inventory.stone}/矿石{n.inventory.ore} "
+        f"背包:木{n.inventory.wood}/石{n.inventory.stone}/矿{n.inventory.ore}/食{n.inventory.food}/金{n.inventory.gold} "
         f"体力:{n.energy}"
         for n in nearby
     ) or "（无）"
@@ -189,8 +219,11 @@ def build_npc_context(npc, world) -> tuple[str, bool]:
         wood=npc.inventory.wood,
         stone=npc.inventory.stone,
         ore=npc.inventory.ore,
+        food=npc.inventory.food,
+        gold=npc.inventory.gold,
         tile_type=tile_type,
         resource_info=resource_info,
+        exchange_hint=exchange_hint,
         notes=notes_str,
         recent_events=recent_str,
     )
@@ -215,7 +248,8 @@ def build_god_context(god, world) -> str:
         tile_type = tile.tile_type.value if tile else "?"
         npc_lines.append(
             f"- {npc.name}({npc.npc_id}) @ ({npc.x},{npc.y}) [{tile_type}] "
-            f"体力:{npc.energy} 背包:木{npc.inventory.wood}/石{npc.inventory.stone}/矿{npc.inventory.ore} "
+            f"体力:{npc.energy} 背包:木{npc.inventory.wood}/石{npc.inventory.stone}"
+            f"/矿{npc.inventory.ore}/食{npc.inventory.food}/金{npc.inventory.gold} "
             f"上次动作:{npc.last_action}"
         )
     npc_summary = "\n".join(npc_lines) or "（无NPC）"

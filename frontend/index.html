@@ -1,791 +1,984 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgentHome - AI 沙盒世界</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117; --panel: #161b22; --border: #30363d;
-      --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
-      --green: #3fb950; --yellow: #d29922; --red: #f85149;
-      --purple: #bc8cff;
-    }
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentHome - LLM 沙盒世界</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* Header */
-    #header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    #header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
-    .header-info { color: var(--muted); font-size: 12px; }
-    .header-info span { color: var(--text); font-weight: 600; }
-    #token-bar-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-    #token-bar { width: 120px; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-    #token-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s, background 0.3s; }
-    #token-text { font-size: 11px; color: var(--muted); white-space: nowrap; }
-    #pause-btn { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: 12px; }
-    #pause-btn:hover { background: var(--border); }
-    #pause-btn.paused { border-color: var(--red); color: var(--red); }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
 
-    /* Main area */
-    #main { display: flex; flex: 1; overflow: hidden; }
+  /* ── Top bar ── */
+  #topbar {
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  #topbar h1 { font-size: 15px; color: #e94560; font-weight: 700; letter-spacing: 1px; }
+  .stat-chip {
+    background: #0f3460;
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: #a0c4ff;
+  }
+  .stat-chip span { color: #fff; font-weight: 600; }
+  #ws-status {
+    margin-left: auto;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #f44;
+    box-shadow: 0 0 6px #f44;
+  }
+  #ws-status.connected { background: #4f4; box-shadow: 0 0 6px #4f4; }
 
-    /* Canvas area */
-    #canvas-wrap { position: relative; flex-shrink: 0; padding: 12px; display: flex; align-items: flex-start; justify-content: center; }
-    canvas { border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; image-rendering: pixelated; display: block; }
-    #weather-overlay { position: absolute; top: 12px; left: 12px; pointer-events: none; border-radius: 4px; }
+  /* Token bar */
+  #token-bar-wrap {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: #aaa;
+  }
+  #token-bar {
+    width: 100px; height: 8px;
+    background: #0f3460;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #token-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #ff9800);
+    border-radius: 4px;
+    transition: width 0.4s;
+  }
+  #token-fill.danger { background: linear-gradient(90deg, #ff9800, #f44336); }
 
-    /* Side panel */
-    #side { width: 300px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  /* ── Main content ── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
 
-    /* God panel */
-    #god-panel { padding: 10px; border-bottom: 1px solid var(--border); }
-    #god-panel h3 { color: var(--purple); font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-    .btn-group { display: flex; gap: 4px; margin-bottom: 6px; }
-    .btn { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font-size: 12px; transition: all 0.15s; }
-    .btn:hover { background: var(--border); }
-    .btn.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.1); }
-    .god-hint { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-    #god-speech { font-size: 11px; color: var(--purple); font-style: italic; padding: 6px; background: rgba(188,140,255,0.05); border-radius: 4px; border-left: 2px solid var(--purple); margin-top: 4px; min-height: 32px; }
+  /* ── Left: Canvas ── */
+  #canvas-wrap {
+    position: relative;
+    flex-shrink: 0;
+    background: #0d1b2a;
+    padding: 8px;
+  }
+  #world-canvas {
+    display: block;
+    cursor: crosshair;
+    image-rendering: pixelated;
+  }
+  #canvas-overlay {
+    position: absolute;
+    top: 8px; left: 8px;
+    pointer-events: none;
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    background: rgba(0,0,0,0.4);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  #paused-overlay {
+    display: none;
+    position: absolute;
+    top: 8px; left: 8px; right: 8px; bottom: 8px;
+    background: rgba(0,0,0,0.75);
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: all;
+  }
+  #paused-overlay.show { display: flex; }
+  #paused-overlay h2 { color: #ff9800; font-size: 20px; }
+  #paused-overlay p { color: #aaa; font-size: 12px; }
 
-    /* NPC list */
-    #npc-list { padding: 10px; border-bottom: 1px solid var(--border); }
-    #npc-list h3 { color: var(--accent); font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-    .npc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; cursor: pointer; margin-bottom: 2px; border: 1px solid transparent; }
-    .npc-row:hover { background: rgba(255,255,255,0.04); }
-    .npc-row.selected { border-color: var(--border); background: rgba(255,255,255,0.06); }
-    .npc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .npc-name { font-weight: 600; width: 44px; flex-shrink: 0; }
-    .npc-pos { color: var(--muted); width: 48px; flex-shrink: 0; font-size: 11px; }
-    .npc-inv { color: var(--muted); font-size: 11px; flex: 1; }
-    .npc-energy-bar { width: 36px; height: 4px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
-    .npc-energy-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-    .npc-status { font-size: 10px; color: var(--muted); width: 36px; text-align: right; flex-shrink: 0; }
+  /* ── Right panel ── */
+  #right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #16213e;
+    border-left: 1px solid #0f3460;
+    overflow: hidden;
+    min-width: 280px;
+    max-width: 360px;
+  }
 
-    /* NPC detail */
-    #npc-detail { padding: 10px; border-bottom: 1px solid var(--border); }
-    #npc-detail h3 { font-size: 12px; color: var(--accent); margin-bottom: 6px; }
-    #npc-detail-content { font-size: 11px; color: var(--muted); line-height: 1.6; }
+  /* Tabs */
+  #tabs {
+    display: flex;
+    background: #0f3460;
+    border-bottom: 1px solid #1a4080;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 8px 4px;
+    border: none;
+    background: transparent;
+    color: #aaa;
+    font-size: 12px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .tab-btn.active { color: #e94560; border-bottom-color: #e94560; }
 
-    /* Chat log */
-    #chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    #chat-wrap h3 { padding: 8px 10px; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
-    #chat-clear { font-size: 11px; color: var(--muted); cursor: pointer; text-transform: none; letter-spacing: 0; }
-    #chat-clear:hover { color: var(--text); }
-    #chat-log { flex: 1; overflow-y: auto; padding: 8px 10px; }
-    .chat-entry { margin-bottom: 5px; line-height: 1.5; }
-    .chat-time { color: var(--muted); font-size: 10px; }
-    .chat-actor { font-weight: 600; }
-    .chat-msg { color: var(--text); }
-    .chat-event { color: var(--muted); font-style: italic; }
-    .chat-god { color: var(--purple); }
-    #chat-log::-webkit-scrollbar { width: 4px; }
-    #chat-log::-webkit-scrollbar-track { background: transparent; }
-    #chat-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .tab-content { display: none; flex: 1; overflow-y: auto; padding: 10px; }
+  .tab-content.active { display: flex; flex-direction: column; gap: 8px; }
 
-    /* Status bar */
-    #status-bar { padding: 4px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); flex-shrink: 0; }
-    #status-bar.error { color: var(--red); }
+  /* Panel sections */
+  .panel-section {
+    background: #0f2540;
+    border: 1px solid #1a4080;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .panel-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #5c8adf;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #1a4080;
+    padding-bottom: 4px;
+  }
 
-    /* Tooltip */
-    #tooltip { position: fixed; background: rgba(13,17,23,0.95); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 11px; pointer-events: none; z-index: 100; display: none; }
+  /* Buttons */
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #1a4080;
+    color: #c0d8ff;
+    border: 1px solid #2a5099;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: #2a5099; color: #fff; }
+  .btn.active { background: #e94560; color: #fff; border-color: #e94560; }
+  .btn.sunny { border-color: #ffcc02; color: #ffcc02; }
+  .btn.sunny:hover { background: #ffcc02; color: #000; }
+  .btn.rainy { border-color: #5b9bd5; color: #5b9bd5; }
+  .btn.rainy:hover { background: #5b9bd5; color: #fff; }
+  .btn.storm { border-color: #9c27b0; color: #9c27b0; }
+  .btn.storm:hover { background: #9c27b0; color: #fff; }
 
-    /* Paused overlay */
-    #paused-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
-    #paused-overlay.show { display: flex; }
-    #paused-overlay h2 { color: var(--red); }
-    #paused-overlay p { color: var(--muted); font-size: 12px; }
-    #resume-btn { padding: 8px 24px; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
-    #new-limit-input { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 4px; width: 120px; text-align: center; }
-  </style>
+  /* God commentary */
+  #god-commentary {
+    background: #0a1e3a;
+    border: 1px solid #2a5099;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-style: italic;
+    color: #a0bfe0;
+    font-size: 12px;
+    min-height: 36px;
+  }
+
+  /* Spawn controls */
+  #spawn-info {
+    font-size: 11px;
+    color: #888;
+    margin-top: 6px;
+    line-height: 1.6;
+  }
+  #spawn-pos { color: #a0c4ff; font-weight: 600; }
+
+  /* NPC list */
+  .npc-card {
+    background: #0a1e3a;
+    border: 1px solid #1a4080;
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .npc-card:hover { border-color: #5c8adf; background: #0f2540; }
+  .npc-card.selected { border-color: #e94560; }
+  .npc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .npc-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .npc-name { font-weight: 600; font-size: 13px; flex: 1; }
+  .npc-pos { font-size: 11px; color: #888; }
+  .npc-action-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #1a4080;
+    color: #a0c4ff;
+  }
+  .npc-action-badge.talk { background: #1a6040; color: #80ffb0; }
+  .npc-action-badge.gather { background: #3a4010; color: #d0f080; }
+  .npc-action-badge.trade { background: #402010; color: #ffb060; }
+  .npc-action-badge.exchange { background: #403010; color: #ffd060; }
+  .npc-action-badge.buy_food { background: #403010; color: #ffd060; }
+  .npc-action-badge.sleep { background: #201040; color: #c080ff; }
+  .npc-action-badge.eat { background: #3a1010; color: #ff8080; }
+
+  /* Energy bar */
+  .energy-bar { height: 4px; background: #1a4080; border-radius: 2px; overflow: hidden; margin: 4px 0; }
+  .energy-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+  /* Inventory chips */
+  .inv-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .inv-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #1a3060;
+    color: #80a0e0;
+  }
+  .inv-chip.gold { background: #3a2a00; color: #ffd700; }
+  .inv-chip.food { background: #1a3a1a; color: #80ff80; }
+
+  /* NPC message */
+  .npc-message {
+    font-size: 11px;
+    color: #a0bfe0;
+    font-style: italic;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.04);
+    border-left: 2px solid #5c8adf;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* Settings */
+  .setting-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .setting-row label { font-size: 11px; color: #aaa; }
+  .setting-input {
+    background: #0a1e3a;
+    border: 1px solid #1a4080;
+    border-radius: 6px;
+    color: #e0e0e0;
+    padding: 6px 10px;
+    font-size: 12px;
+    width: 100%;
+    outline: none;
+  }
+  .setting-input:focus { border-color: #5c8adf; }
+  .api-key-wrap { display: flex; gap: 6px; }
+  .api-key-wrap .setting-input { flex: 1; }
+  .api-key-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+  .api-key-status.set { background: #1a3a1a; color: #80ff80; }
+  .api-key-status.unset { background: #3a1a1a; color: #ff8080; }
+  select.setting-input { cursor: pointer; }
+
+  /* Slider */
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: #1a4080;
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #5c8adf;
+    cursor: pointer;
+  }
+  .slider-value { font-size: 11px; color: #a0c4ff; text-align: right; }
+
+  /* ── Chat log ── */
+  #chat-wrap {
+    background: #0d1b2a;
+    border-top: 1px solid #0f3460;
+    display: flex;
+    flex-direction: column;
+    height: 155px;
+    flex-shrink: 0;
+  }
+  #chat-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+    font-size: 11px;
+    color: #5c8adf;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  #chat-clear {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  #chat-clear:hover { color: #e94560; }
+  #chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 5px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .chat-line { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .chat-time { color: #555; }
+  .chat-talk { color: #a0d0ff; }
+  .chat-gather { color: #a0d080; }
+  .chat-trade { color: #ffa060; }
+  .chat-exchange { color: #ffd060; }
+  .chat-sleep { color: #c080ff; }
+  .chat-eat { color: #ff8080; }
+  .chat-weather { color: #80d0ff; }
+  .chat-god { color: #c0a0ff; font-style: italic; }
+  .chat-system { color: #555; }
+</style>
 </head>
 <body>
 
-<!-- Header -->
-<div id="header">
-  <h1>AgentHome</h1>
-  <div class="header-info">Tick: <span id="hdr-tick">0</span></div>
-  <div class="header-info"><span id="hdr-time">Day 1 06:00</span> <span id="hdr-phase">dawn</span></div>
-  <div class="header-info">天气: <span id="hdr-weather">☀ sunny</span></div>
+<!-- Top bar -->
+<div id="topbar">
+  <h1>⚡ AgentHome</h1>
+  <div class="stat-chip">Tick <span id="tick-val">0</span></div>
+  <div class="stat-chip"><span id="time-val">Day 1 06:00</span></div>
+  <div class="stat-chip"><span id="weather-val">☀ 晴天</span></div>
   <div id="token-bar-wrap">
     <div id="token-bar"><div id="token-fill" style="width:0%"></div></div>
-    <div id="token-text">0 / 200k tokens</div>
-    <button id="pause-btn">暂停</button>
+    <span id="token-text">0/200k</span>
   </div>
+  <div id="ws-status" title="WebSocket 连接状态"></div>
 </div>
 
 <!-- Main -->
 <div id="main">
-  <!-- Canvas -->
+
+  <!-- Canvas area -->
   <div id="canvas-wrap">
     <canvas id="world-canvas" width="600" height="600"></canvas>
-    <canvas id="weather-overlay" width="600" height="600" style="position:absolute;top:12px;left:12px;pointer-events:none;border-radius:4px;"></canvas>
+    <div id="canvas-overlay"></div>
+    <div id="paused-overlay">
+      <h2>⏸ 已暂停（Token 超限）</h2>
+      <p>请增加 Token 限额后恢复</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="new-limit-input" type="number" class="setting-input" style="width:120px"
+               placeholder="新限额" min="10000" step="10000">
+        <button class="btn active" onclick="applyNewLimit()">恢复</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Side Panel -->
-  <div id="side">
-    <!-- God Panel -->
-    <div id="god-panel">
-      <h3>⚡ 上帝控制台</h3>
-      <div class="god-hint">天气控制:</div>
-      <div class="btn-group">
-        <button class="btn" onclick="setWeather('sunny')">☀ 晴天</button>
-        <button class="btn" onclick="setWeather('rainy')">🌧 雨天</button>
-        <button class="btn" onclick="setWeather('storm')">⛈ 暴风</button>
+  <!-- Right panel -->
+  <div id="right-panel">
+    <div id="tabs">
+      <button class="tab-btn active" onclick="showTab('god')">⚡ 上帝</button>
+      <button class="tab-btn" onclick="showTab('npcs')">👥 NPC</button>
+      <button class="tab-btn" onclick="showTab('settings')">⚙ 设置</button>
+    </div>
+
+    <!-- God Tab -->
+    <div id="tab-god" class="tab-content active">
+      <div class="panel-section">
+        <h3>🌤 天气控制</h3>
+        <div class="btn-group">
+          <button class="btn sunny" onclick="setWeather('sunny')">☀ 晴天</button>
+          <button class="btn rainy" onclick="setWeather('rainy')">🌧 雨天</button>
+          <button class="btn storm" onclick="setWeather('storm')">⛈ 暴风</button>
+        </div>
       </div>
-      <div class="god-hint">资源刷新 <span id="spawn-hint">(先选地块)</span>:</div>
-      <div class="btn-group">
-        <button class="btn" id="spawn-wood-btn" onclick="prepareSpawn('wood')">🌲 树木</button>
-        <button class="btn" id="spawn-stone-btn" onclick="prepareSpawn('stone')">🪨 石头</button>
-        <button class="btn" id="spawn-ore-btn" onclick="prepareSpawn('ore')">💎 矿石</button>
+
+      <div class="panel-section">
+        <h3>📦 刷新资源</h3>
+        <div class="btn-group" id="spawn-btns">
+          <button class="btn" id="spawn-btn-wood" onclick="selectSpawn('wood',this)">🌲 木头</button>
+          <button class="btn" id="spawn-btn-stone" onclick="selectSpawn('stone',this)">🪨 石头</button>
+          <button class="btn" id="spawn-btn-ore" onclick="selectSpawn('ore',this)">💎 矿石</button>
+          <button class="btn" id="spawn-btn-food" onclick="selectSpawn('food',this)">🌾 食物</button>
+        </div>
+        <div id="spawn-info">
+          选中资源类型后，<b>点击地图</b>选择位置<br>
+          位置: <span id="spawn-pos">未选择</span>
+          <span id="spawn-confirm-wrap" style="display:none">
+            &nbsp;<button class="btn active" onclick="confirmSpawn()" style="padding:2px 10px;font-size:11px">确认刷新</button>
+          </span>
+        </div>
       </div>
-      <div id="god-speech">世界在我的注视下缓缓运转...</div>
+
+      <div class="panel-section">
+        <h3>🌐 上帝旁白</h3>
+        <div id="god-commentary">世界在我的注视下缓缓运转...</div>
+      </div>
+
+      <div class="panel-section">
+        <h3>🎮 游戏控制</h3>
+        <div class="btn-group">
+          <button class="btn" onclick="sendControl('pause')">⏸ 暂停AI</button>
+          <button class="btn" onclick="sendControl('resume')">▶ 恢复AI</button>
+        </div>
+      </div>
     </div>
 
-    <!-- NPC List -->
-    <div id="npc-list">
-      <h3>🧑 NPC 状态</h3>
-      <div id="npc-rows"></div>
+    <!-- NPC Tab -->
+    <div id="tab-npcs" class="tab-content">
+      <div id="npc-list"></div>
     </div>
 
-    <!-- NPC Detail -->
-    <div id="npc-detail">
-      <h3>📋 详情</h3>
-      <div id="npc-detail-content">点击 NPC 查看详情</div>
-    </div>
+    <!-- Settings Tab -->
+    <div id="tab-settings" class="tab-content">
+      <div class="panel-section">
+        <h3>🔑 Gemini API Key</h3>
+        <div class="setting-row">
+          <label>API Key（设置后覆盖 .env 文件）</label>
+          <div class="api-key-wrap">
+            <input type="password" id="api-key-input" class="setting-input" placeholder="AIzaSy...">
+            <button class="btn" onclick="toggleApiKeyVisibility()" title="显示/隐藏">👁</button>
+          </div>
+          <div id="api-key-status" class="api-key-status unset">未检测到（使用 .env 中的值）</div>
+        </div>
+      </div>
 
-    <!-- Chat log -->
-    <div id="chat-wrap">
-      <h3>💬 世界日志 <span id="chat-clear" onclick="clearChat()">清空</span></h3>
-      <div id="chat-log"></div>
+      <div class="panel-section">
+        <h3>🤖 模型</h3>
+        <div class="setting-row">
+          <label>Gemini 模型名称</label>
+          <select id="model-select" class="setting-input">
+            <option value="gemini-2.5-flash">gemini-2.5-flash（推荐）</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <h3>📊 Token 限额</h3>
+        <div class="setting-row">
+          <label>会话 Token 上限</label>
+          <input type="range" id="token-limit-slider" min="10000" max="1000000" step="10000" value="200000"
+                 oninput="document.getElementById('token-limit-display').textContent=formatNum(this.value)">
+          <div class="slider-value"><span id="token-limit-display">200,000</span></div>
+        </div>
+      </div>
+
+      <button class="btn active" style="width:100%;padding:8px;margin-top:4px" onclick="saveSettings()">💾 保存设置</button>
+      <div id="settings-msg" style="font-size:11px;color:#80ff80;text-align:center;margin-top:6px;display:none"></div>
     </div>
   </div>
 </div>
 
-<!-- Status bar -->
-<div id="status-bar" id="status-bar">正在连接...</div>
-
-<!-- Tooltip -->
-<div id="tooltip"></div>
-
-<!-- Paused overlay -->
-<div id="paused-overlay">
-  <h2>⚠ Token 用量已达上限</h2>
-  <p>游戏已自动暂停以防止过度消耗 API token</p>
-  <div style="display:flex;gap:8px;align-items:center;">
-    <input id="new-limit-input" type="number" placeholder="新上限 (如 500000)" step="50000">
-    <button id="resume-btn" onclick="resumeGame()">恢复游戏</button>
+<!-- Chat log -->
+<div id="chat-wrap">
+  <div id="chat-header">
+    💬 世界日志
+    <button id="chat-clear" onclick="clearChat()">清空</button>
   </div>
-  <p id="token-detail" style="color:#8b949e;font-size:11px;"></p>
+  <div id="chat-log"></div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-// State
-// ═══════════════════════════════════════════════════════
-const state = {
-  world: null,       // latest world snapshot
-  selectedNpc: null, // selected NPC id
-  spawnMode: null,   // 'wood' | 'stone' | 'ore' | null
-  selectedTile: null, // {x, y} for spawn
-  tick: 0,
-  ws: null,
-  connected: false,
-  rain_particles: [],
-};
+// ── Constants ────────────────────────────────────────────────────────────
+const TILE_SIZE = 30;
+const COLS = 20, ROWS = 20;
 
-// NPC color map (from server)
-const npcColors = {};
+// ── State ─────────────────────────────────────────────────────────────────
+let worldState = null;
+let ws = null;
+let wsConnected = false;
+let spawnType = null;
+let spawnPos = null;
+let rainDrops = [];
 
-// Weather icons
-const weatherIcons = { sunny: '☀', rainy: '🌧', storm: '⛈' };
-
-// ═══════════════════════════════════════════════════════
-// WebSocket
-// ═══════════════════════════════════════════════════════
-function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/ws`;
-  setStatus('正在连接 ' + url + '...');
-
-  state.ws = new WebSocket(url);
-
-  state.ws.onopen = () => {
-    state.connected = true;
-    setStatus('已连接 ✓');
-  };
-
-  state.ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === 'world_state') handleWorldState(msg);
-    } catch(e) { console.error('parse error', e); }
-  };
-
-  state.ws.onclose = () => {
-    state.connected = false;
-    setStatus('连接断开，3秒后重连...', true);
-    setTimeout(connectWS, 3000);
-  };
-
-  state.ws.onerror = (e) => {
-    setStatus('连接错误', true);
-  };
-}
-
-function sendMsg(obj) {
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify(obj));
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// World state handler
-// ═══════════════════════════════════════════════════════
-function handleWorldState(msg) {
-  state.world = msg;
-  state.tick = msg.tick;
-
-  // Update NPC color cache
-  if (msg.npcs) {
-    for (const npc of msg.npcs) npcColors[npc.id] = npc.color;
-  }
-
-  updateHeader(msg);
-  updateNpcList(msg.npcs);
-  updateNpcDetail(msg.npcs);
-  updateGodSpeech(msg.god);
-  updateTokenUI(msg.token_usage);
-  renderWorld(msg);
-
-  // Process events for chat log
-  if (msg.events && msg.events.length > 0) {
-    for (const ev of msg.events) appendChatEvent(ev, msg.time);
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// Header
-// ═══════════════════════════════════════════════════════
-function updateHeader(msg) {
-  document.getElementById('hdr-tick').textContent = msg.tick;
-  document.getElementById('hdr-time').textContent = msg.time.time_str;
-  document.getElementById('hdr-phase').textContent = `(${msg.time.phase})`;
-  const wi = weatherIcons[msg.weather] || '';
-  document.getElementById('hdr-weather').textContent = `${wi} ${msg.weather}`;
-}
-
-// ═══════════════════════════════════════════════════════
-// Token UI
-// ═══════════════════════════════════════════════════════
-function updateTokenUI(usage) {
-  if (!usage) return;
-  const pct = Math.min(100, (usage.total_tokens_used / Math.max(1, usage.limit)) * 100);
-  const fill = document.getElementById('token-fill');
-  fill.style.width = pct + '%';
-  fill.style.background = pct > 90 ? '#f85149' : pct > 70 ? '#d29922' : '#3fb950';
-
-  const k = n => n >= 1000 ? (n/1000).toFixed(1) + 'k' : n;
-  document.getElementById('token-text').textContent = `${k(usage.total_tokens_used)} / ${k(usage.limit)}`;
-
-  const pauseBtn = document.getElementById('pause-btn');
-  if (usage.paused) {
-    pauseBtn.textContent = '已暂停';
-    pauseBtn.classList.add('paused');
-    const overlay = document.getElementById('paused-overlay');
-    overlay.classList.add('show');
-    document.getElementById('token-detail').textContent =
-      `已使用 ${usage.total_tokens_used} / ${usage.limit} tokens (${usage.usage_pct}%)`;
-  } else {
-    pauseBtn.textContent = '暂停';
-    pauseBtn.classList.remove('paused');
-    document.getElementById('paused-overlay').classList.remove('show');
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// NPC List
-// ═══════════════════════════════════════════════════════
-function updateNpcList(npcs) {
-  if (!npcs) return;
-  const container = document.getElementById('npc-rows');
-  container.innerHTML = '';
-  for (const npc of npcs) {
-    const row = document.createElement('div');
-    row.className = 'npc-row' + (state.selectedNpc === npc.id ? ' selected' : '');
-    row.onclick = () => { state.selectedNpc = npc.id; updateNpcList(state.world?.npcs); updateNpcDetail(state.world?.npcs); };
-
-    const energyColor = npc.energy > 60 ? '#3fb950' : npc.energy > 30 ? '#d29922' : '#f85149';
-    const statusMap = { talk:'说', move:'走', gather:'采', trade:'交', rest:'息', think:'想', idle:'待' };
-    const statusLabel = statusMap[npc.last_action] || '?';
-
-    const inv = npc.inventory;
-    const invStr = `🌲${inv.wood} 🪨${inv.stone} 💎${inv.ore}`;
-
-    row.innerHTML = `
-      <div class="npc-dot" style="background:${npc.color}"></div>
-      <div class="npc-name" style="color:${npc.color}">${npc.name}</div>
-      <div class="npc-pos">[${npc.x},${npc.y}]</div>
-      <div class="npc-inv">${invStr}</div>
-      <div style="width:36px;flex-shrink:0">
-        <div style="height:4px;background:var(--border);border-radius:2px;">
-          <div style="height:4px;background:${energyColor};border-radius:2px;width:${npc.energy}%"></div>
-        </div>
-      </div>
-      <div class="npc-status">${statusLabel}${npc.is_processing ? '⏳' : ''}</div>
-    `;
-    container.appendChild(row);
-  }
-}
-
-function updateNpcDetail(npcs) {
-  if (!state.selectedNpc || !npcs) return;
-  const npc = npcs.find(n => n.id === state.selectedNpc);
-  if (!npc) return;
-  const el = document.getElementById('npc-detail-content');
-  const inv = npc.inventory;
-  el.innerHTML = `
-    <div style="color:${npc.color};font-weight:600;margin-bottom:4px">${npc.name}</div>
-    <div>位置: (${npc.x}, ${npc.y}) &nbsp; 体力: <span style="color:${npc.energy>60?'#3fb950':npc.energy>30?'#d29922':'#f85149'}">${npc.energy}/100</span></div>
-    <div>背包: 🌲木头×${inv.wood} &nbsp; 🪨石头×${inv.stone} &nbsp; 💎矿石×${inv.ore}</div>
-    <div>上次动作: <span style="color:var(--accent)">${npc.last_action}</span> ${npc.is_processing ? '<span style="color:var(--yellow)">思考中...</span>' : ''}</div>
-    ${npc.last_message ? `<div style="margin-top:4px;color:var(--text);font-style:italic">"${npc.last_message}"</div>` : ''}
-  `;
-}
-
-// ═══════════════════════════════════════════════════════
-// God speech
-// ═══════════════════════════════════════════════════════
-function updateGodSpeech(god) {
-  if (!god) return;
-  const el = document.getElementById('god-speech');
-  el.textContent = god.commentary || '...';
-}
-
-// ═══════════════════════════════════════════════════════
-// Chat log
-// ═══════════════════════════════════════════════════════
-function appendChatEvent(ev, time) {
-  const log = document.getElementById('chat-log');
-  const div = document.createElement('div');
-  div.className = 'chat-entry';
-
-  const timeStr = time ? time.time_str : '';
-
-  if (ev.type === 'npc_spoke') {
-    const color = npcColors[ev.actor_id] || '#fff';
-    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-actor" style="color:${color}">${ev.actor || ev.actor_id}</span>: <span class="chat-msg">${escapeHtml(ev.message || ev.summary)}</span>`;
-  } else if (ev.type === 'god_commentary' || ev.type === 'weather_changed' || ev.type === 'resource_spawned') {
-    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-god">⚡ ${escapeHtml(ev.summary)}</span>`;
-  } else {
-    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-event">${escapeHtml(ev.summary)}</span>`;
-  }
-
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-
-  // Keep only last 200 entries
-  while (log.children.length > 200) log.removeChild(log.firstChild);
-}
-
-function clearChat() { document.getElementById('chat-log').innerHTML = ''; }
-function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ═══════════════════════════════════════════════════════
-// Canvas Rendering
-// ═══════════════════════════════════════════════════════
-const TILE = 30;  // px per tile
-const CANVAS_W = 600;
-const CANVAS_H = 600;
-
+// ── Canvas setup ──────────────────────────────────────────────────────────
 const canvas = document.getElementById('world-canvas');
 const ctx = canvas.getContext('2d');
-const weatherCanvas = document.getElementById('weather-overlay');
-const wctx = weatherCanvas.getContext('2d');
 
-// Tile colors
-const TILE_COLORS = { g: '#5a8f3c', w: '#2a5fa5', r: '#6e6e6e', f: '#2d5a1b' };
-const TILE_BORDER = { g: '#4a7a30', w: '#1e4d8c', r: '#5a5a5a', f: '#234a16' };
+const TILE_COLORS = { g:'#4a8e2a', w:'#3060a0', r:'#6a6a6a', f:'#235a28', o:'#8a6830' };
+const RESOURCE_ICONS = { w:'🌲', s:'🪨', o:'💎', f:'🌾' };
+const WEATHER_LABELS = { sunny:'☀ 晴天', rainy:'🌧 雨天', storm:'⛈ 暴风' };
 
-// Build tile lookup from array
-let tileMap = {};
-let npcBubbles = {}; // npcId -> {msg, expires}
-
-function buildTileMap(tiles) {
-  tileMap = {};
-  for (const t of tiles) tileMap[`${t.x},${t.y}`] = t;
+// ── WebSocket ─────────────────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => {
+    wsConnected = true;
+    document.getElementById('ws-status').classList.add('connected');
+    addChat('system', '已连接到服务器');
+  };
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'world_state') onWorldState(msg);
+    } catch {}
+  };
+  ws.onclose = () => {
+    wsConnected = false;
+    document.getElementById('ws-status').classList.remove('connected');
+    addChat('system', '连接断开，3秒后重连...');
+    setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => ws.close();
 }
 
-function renderWorld(msg) {
-  if (!msg) return;
+function sendMsg(data) {
+  if (ws && wsConnected) ws.send(JSON.stringify(data));
+}
 
-  if (msg.tiles) buildTileMap(msg.tiles);
+// ── World state handler ────────────────────────────────────────────────────
+function onWorldState(msg) {
+  worldState = msg;
 
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  // Topbar
+  document.getElementById('tick-val').textContent = msg.tick;
+  document.getElementById('time-val').textContent = msg.time.time_str;
+  document.getElementById('weather-val').textContent = WEATHER_LABELS[msg.weather] || msg.weather;
 
-  // 1. Draw tiles
-  for (const t of msg.tiles || []) {
-    const px = t.x * TILE, py = t.y * TILE;
-    ctx.fillStyle = TILE_COLORS[t.t] || '#333';
-    ctx.fillRect(px, py, TILE, TILE);
-    ctx.strokeStyle = TILE_BORDER[t.t] || '#222';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+  // Token bar
+  const u = msg.token_usage;
+  if (u) {
+    const pct = Math.min(100, u.usage_pct || 0);
+    const fill = document.getElementById('token-fill');
+    fill.style.width = pct + '%';
+    fill.className = pct > 80 ? 'danger' : '';
+    document.getElementById('token-text').textContent =
+      `${fmtK(u.total_tokens_used)}/${fmtK(u.limit)}`;
+    const ov = document.getElementById('paused-overlay');
+    if (u.paused) ov.classList.add('show'); else ov.classList.remove('show');
   }
 
-  // Highlight selected tile
-  if (state.selectedTile && state.spawnMode) {
-    const { x, y } = state.selectedTile;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
+  // God commentary
+  if (msg.god && msg.god.commentary) {
+    document.getElementById('god-commentary').textContent = msg.god.commentary;
   }
 
-  // 2. Draw resources
-  for (const t of msg.tiles || []) {
-    if (!t.r) continue;
-    const px = t.x * TILE, py = t.y * TILE;
-    const ratio = t.q / Math.max(1, t.mq);
-    ctx.globalAlpha = 0.4 + ratio * 0.6;
-    if (t.r === 'w') {  // wood
-      ctx.fillStyle = '#8B4513';
-      ctx.beginPath();
-      ctx.arc(px + TILE/2, py + TILE/2, 5, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillStyle = '#228B22';
-      ctx.beginPath();
-      ctx.arc(px + TILE/2, py + TILE/2 - 6, 6, 0, Math.PI*2);
-      ctx.fill();
-    } else if (t.r === 's') {  // stone
-      ctx.fillStyle = '#A9A9A9';
-      ctx.fillRect(px + TILE/2 - 5, py + TILE/2 - 4, 10, 8);
-    } else if (t.r === 'o') {  // ore
-      ctx.fillStyle = '#FFD700';
-      const cx = px + TILE/2, cy = py + TILE/2, s = 5;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - s);
-      ctx.lineTo(cx + s*0.6, cy);
-      ctx.lineTo(cx, cy + s);
-      ctx.lineTo(cx - s*0.6, cy);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+  // Events → chat
+  for (const evt of (msg.events || [])) handleEvent(evt, msg.time);
+
+  // NPC list
+  renderNPCList(msg.npcs, msg.tick);
+}
+
+function handleEvent(evt, time) {
+  const t = `[${time.time_str}]`;
+  switch (evt.type) {
+    case 'npc_spoke':
+      addChat('talk', `${t} ${evt.actor}: "${evt.message}"`); break;
+    case 'npc_gathered':
+      addChat('gather', `${t} ${evt.actor} 采集了 ${evt.amount} ${evt.resource}`); break;
+    case 'npc_traded':
+      addChat('trade', `${t} ${evt.actor} 与 ${evt.with || '?'} 交易`); break;
+    case 'npc_exchanged':
+      addChat('exchange', `${t} ${evt.actor} 在交易所换得 ${evt.gold}金（${evt.qty}x${evt.item}）`); break;
+    case 'npc_bought_food':
+      addChat('exchange', `${t} ${evt.actor} 购买了 ${evt.qty} 食物，花费 ${evt.gold_spent} 金`); break;
+    case 'npc_ate':
+      addChat('eat', `${t} ${evt.actor} 吃了食物，回复 ${evt.amount} 体力`); break;
+    case 'npc_slept':
+      addChat('sleep', `${t} ${evt.actor} 睡觉，回复 ${evt.amount} 体力`); break;
+    case 'weather_changed':
+      addChat('weather', `${t} 天气变为 ${WEATHER_LABELS[evt.weather] || evt.weather}`);
+      if (evt.commentary) addChat('god', `神明: "${evt.commentary}"`);
+      break;
+    case 'resource_spawned':
+      addChat('weather', `${t} 上帝在(${evt.x},${evt.y})刷新了 ${evt.resource_type}`);
+      if (evt.commentary) addChat('god', `神明: "${evt.commentary}"`);
+      break;
+  }
+}
+
+// ── Chat log ──────────────────────────────────────────────────────────────
+function addChat(cls, text) {
+  const log = document.getElementById('chat-log');
+  const d = document.createElement('div');
+  d.className = `chat-line chat-${cls}`;
+  d.textContent = text;
+  log.appendChild(d);
+  while (log.children.length > 200) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+function clearChat() { document.getElementById('chat-log').innerHTML = ''; }
+
+// ── NPC list ──────────────────────────────────────────────────────────────
+function renderNPCList(npcs, tick) {
+  if (!npcs) return;
+  const c = document.getElementById('npc-list');
+  c.innerHTML = '';
+  for (const npc of npcs) {
+    const energyColor = npc.energy > 60 ? '#4caf50' : npc.energy > 30 ? '#ff9800' : '#f44336';
+    const inv = npc.inventory;
+    const items = [];
+    if (inv.wood)  items.push(`<span class="inv-chip">🌲${inv.wood}</span>`);
+    if (inv.stone) items.push(`<span class="inv-chip">🪨${inv.stone}</span>`);
+    if (inv.ore)   items.push(`<span class="inv-chip">💎${inv.ore}</span>`);
+    if (inv.food)  items.push(`<span class="inv-chip food">🌾${inv.food}</span>`);
+    if (inv.gold)  items.push(`<span class="inv-chip gold">🪙${inv.gold}</span>`);
+    const msgAge = tick - npc.last_message_tick;
+    const msgHtml = (npc.last_message && msgAge < 10)
+      ? `<div class="npc-message">"${npc.last_message.substring(0,80)}"</div>` : '';
+    const card = document.createElement('div');
+    card.className = 'npc-card';
+    card.innerHTML = `
+      <div class="npc-header">
+        <div class="npc-dot" style="background:${npc.color};box-shadow:0 0 4px ${npc.color}40"></div>
+        <div class="npc-name">${npc.name}</div>
+        <div class="npc-pos">(${npc.x},${npc.y})</div>
+        <div class="npc-action-badge ${npc.last_action}">${npc.is_processing ? '🔄' : npc.last_action}</div>
+      </div>
+      <div class="energy-bar"><div class="energy-fill" style="width:${npc.energy}%;background:${energyColor}"></div></div>
+      <div style="font-size:10px;color:#666;margin-bottom:4px">⚡ ${npc.energy}/100</div>
+      <div class="inv-chips">${items.join('')}</div>
+      ${msgHtml}
+    `;
+    c.appendChild(card);
+  }
+}
+
+// ── Canvas rendering ──────────────────────────────────────────────────────
+function render(state) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const t of state.tiles) drawTile(t);
+  for (const npc of state.npcs) drawNPC(npc, state.tick);
+  drawWeather(state.weather);
+}
+
+function drawTile(t) {
+  const x = t.x * TILE_SIZE, y = t.y * TILE_SIZE;
+  const baseColor = TILE_COLORS[t.t] || '#4a8e2a';
+
+  // Spawn selection highlight
+  if (spawnPos && spawnPos.x === t.x && spawnPos.y === t.y) {
+    ctx.fillStyle = '#ffffffaa';
+    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
   }
 
-  // Update speech bubble lifetimes
-  if (msg.npcs) {
-    for (const npc of msg.npcs) {
-      if (npc.last_message && npc.last_message_tick >= state.tick - 2) {
-        npcBubbles[npc.id] = { msg: npc.last_message, npc };
-      }
-    }
-  }
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
 
-  // 3. Draw NPCs
-  for (const npc of msg.npcs || []) {
-    const cx = npc.x * TILE + TILE/2;
-    const cy = npc.y * TILE + TILE/2;
-    const r = 9;
+  // Subtle grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
 
-    // Glow if selected
-    if (state.selectedNpc === npc.id) {
-      ctx.shadowColor = npc.color;
-      ctx.shadowBlur = 12;
-    }
-
-    // Body
-    ctx.fillStyle = npc.color;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fill();
-
-    // Processing spinner ring
-    if (npc.is_processing) {
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      const now = Date.now() / 300;
-      ctx.arc(cx, cy, r + 3, now, now + Math.PI * 1.5);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    ctx.shadowBlur = 0;
-
-    // Name label
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 9px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(npc.name, cx, cy + r + 1);
-  }
-
-  // 4. Draw speech bubbles
-  for (const [id, bubble] of Object.entries(npcBubbles)) {
-    const npc = (msg.npcs || []).find(n => n.id === id);
-    if (!npc) continue;
-    if (npc.last_message_tick < state.tick - 3) {
-      delete npcBubbles[id];
-      continue;
-    }
-
-    const cx = npc.x * TILE + TILE/2;
-    const cy = npc.y * TILE - 2;
-    const text = bubble.msg.length > 20 ? bubble.msg.slice(0, 20) + '…' : bubble.msg;
-
-    ctx.font = '9px sans-serif';
-    const tw = ctx.measureText(text).width;
-    const bw = tw + 10, bh = 16;
-    const bx = cx - bw/2, by = cy - bh - 4;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    roundRect(ctx, bx, by, bw, bh, 3);
-    ctx.fill();
-
-    ctx.strokeStyle = npc.color;
-    ctx.lineWidth = 1;
-    roundRect(ctx, bx, by, bw, bh, 3);
-    ctx.stroke();
-
-    ctx.fillStyle = '#eee';
+  // Exchange tile: golden icon
+  if (t.e) {
+    ctx.fillStyle = '#b8960a';
+    ctx.fillRect(x+3, y+3, TILE_SIZE-6, TILE_SIZE-6);
+    ctx.font = '14px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, by + bh/2);
-  }
-
-  // Render weather effect
-  renderWeather(msg.weather);
-
-  // Kick animation frame for spinning NPCs
-  if ((msg.npcs || []).some(n => n.is_processing)) {
-    requestAnimationFrame(() => renderWorld(state.world));
-  }
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-// ═══════════════════════════════════════════════════════
-// Weather effects
-// ═══════════════════════════════════════════════════════
-let weatherAnimFrame = null;
-let lightningFlash = 0;
-
-function renderWeather(weather) {
-  wctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-  if (weather === 'rainy') {
-    // Blue tint
-    wctx.fillStyle = 'rgba(50, 100, 180, 0.08)';
-    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    // Animated rain
-    animateRain();
-  } else if (weather === 'storm') {
-    // Dark tint
-    wctx.fillStyle = 'rgba(0, 0, 30, 0.2)';
-    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    animateRain(true);
-    if (lightningFlash > 0) {
-      wctx.fillStyle = `rgba(255,255,200,${lightningFlash * 0.4})`;
-      wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      lightningFlash = Math.max(0, lightningFlash - 0.05);
-    }
-  } else {
-    if (weatherAnimFrame) { cancelAnimationFrame(weatherAnimFrame); weatherAnimFrame = null; }
-    // Sunny: subtle warm tint
-    wctx.fillStyle = 'rgba(255, 220, 100, 0.03)';
-    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  }
-}
-
-function animateRain(heavy = false) {
-  if (state.rain_particles.length === 0) {
-    const count = heavy ? 120 : 60;
-    for (let i = 0; i < count; i++) {
-      state.rain_particles.push({
-        x: Math.random() * CANVAS_W,
-        y: Math.random() * CANVAS_H,
-        speed: 3 + Math.random() * 3,
-        len: heavy ? 14 : 10,
-      });
-    }
-  }
-
-  wctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-  if (heavy) {
-    wctx.fillStyle = 'rgba(0,0,30,0.18)';
-    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  } else {
-    wctx.fillStyle = 'rgba(50,100,180,0.07)';
-    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  }
-
-  wctx.strokeStyle = heavy ? 'rgba(180,200,255,0.5)' : 'rgba(150,180,255,0.35)';
-  wctx.lineWidth = heavy ? 1.5 : 1;
-
-  for (const p of state.rain_particles) {
-    wctx.beginPath();
-    wctx.moveTo(p.x, p.y);
-    wctx.lineTo(p.x - 2, p.y + p.len);
-    wctx.stroke();
-    p.y += p.speed;
-    p.x -= 1;
-    if (p.y > CANVAS_H) { p.y = -10; p.x = Math.random() * CANVAS_W; }
-    if (p.x < 0) p.x = CANVAS_W;
-  }
-
-  if (heavy && Math.random() < 0.005) lightningFlash = 1;
-
-  weatherAnimFrame = requestAnimationFrame(() => {
-    const w = state.world?.weather;
-    if (w === 'rainy' || w === 'storm') animateRain(w === 'storm');
-    else { state.rain_particles = []; wctx.clearRect(0,0,CANVAS_W,CANVAS_H); }
-  });
-}
-
-// ═══════════════════════════════════════════════════════
-// Canvas interaction
-// ═══════════════════════════════════════════════════════
-canvas.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = CANVAS_W / rect.width;
-  const scaleY = CANVAS_H / rect.height;
-  const cx = Math.floor((e.clientX - rect.left) * scaleX / TILE);
-  const cy = Math.floor((e.clientY - rect.top) * scaleY / TILE);
-
-  if (state.spawnMode && state.selectedTile && state.selectedTile.x === cx && state.selectedTile.y === cy) {
-    // Second click on same tile: execute spawn
-    executeSpawn(cx, cy);
+    ctx.fillText('🏛', x + TILE_SIZE/2, y + TILE_SIZE/2);
     return;
   }
 
-  state.selectedTile = { x: cx, y: cy };
+  // Town cobblestone texture (simple grid dots)
+  if (t.t === 'o') {
+    ctx.fillStyle = 'rgba(255,220,100,0.08)';
+    ctx.fillRect(x+1, y+1, TILE_SIZE/2-2, TILE_SIZE/2-2);
+    ctx.fillRect(x+TILE_SIZE/2+1, y+TILE_SIZE/2+1, TILE_SIZE/2-2, TILE_SIZE/2-2);
+    return;
+  }
 
-  // Check if NPC is on this tile
-  if (state.world?.npcs) {
-    const npc = state.world.npcs.find(n => n.x === cx && n.y === cy);
-    if (npc) {
-      state.selectedNpc = npc.id;
-      updateNpcList(state.world.npcs);
-      updateNpcDetail(state.world.npcs);
+  // Resource icon
+  if (t.r && t.q > 0) {
+    const icon = RESOURCE_ICONS[t.r] || '';
+    if (icon) {
+      ctx.font = '14px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(icon, x + TILE_SIZE/2, y + TILE_SIZE/2);
+      // Quantity dots
+      const frac = t.q / (t.mq || 5);
+      const dots = Math.ceil(frac * 3);
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + frac*0.4})`;
+      for (let i = 0; i < dots; i++) ctx.fillRect(x+4+i*5, y+TILE_SIZE-5, 3, 3);
     }
   }
+}
 
-  if (state.spawnMode) {
-    document.getElementById('spawn-hint').textContent = `(已选[${cx},${cy}] 再次点击执行)`;
+function drawNPC(npc, tick) {
+  const cx = npc.x * TILE_SIZE + TILE_SIZE/2;
+  const cy = npc.y * TILE_SIZE + TILE_SIZE/2;
+  const r = 9;
+
+  // Processing animated ring
+  if (npc.is_processing) {
+    const angle = (Date.now() / 400) % (Math.PI * 2);
+    ctx.save();
+    ctx.strokeStyle = npc.color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.lineDashOffset = -(angle * 8);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
-  if (state.world) renderWorld(state.world);
-});
+  // Energy arc
+  const ef = npc.energy / 100;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 2, -Math.PI/2, -Math.PI/2 + ef * Math.PI * 2);
+  ctx.strokeStyle = ef > 0.6 ? '#4caf50' : ef > 0.3 ? '#ff9800' : '#f44336';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = CANVAS_W / rect.width;
-  const scaleY = CANVAS_H / rect.height;
-  const cx = Math.floor((e.clientX - rect.left) * scaleX / TILE);
-  const cy = Math.floor((e.clientY - rect.top) * scaleY / TILE);
+  // Body
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = npc.color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  const tooltip = document.getElementById('tooltip');
-  const tile = tileMap[`${cx},${cy}`];
+  // Letter
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(npc.name[0], cx, cy);
 
-  if (tile) {
-    const typeNames = { g:'草地', w:'水域', r:'岩石', f:'森林' };
-    const resNames = { w:'木头', s:'石头', o:'矿石' };
-    let info = `[${cx},${cy}] ${typeNames[tile.t] || tile.t}`;
-    if (tile.r) info += ` | ${resNames[tile.r] || tile.r} ${tile.q}/${tile.mq}`;
-    if (tile.n && tile.n.length) info += ` | NPC: ${tile.n.join(',')}`;
-    tooltip.textContent = info;
-    tooltip.style.display = 'block';
-    tooltip.style.left = (e.clientX + 12) + 'px';
-    tooltip.style.top = (e.clientY + 12) + 'px';
+  // Name label
+  ctx.font = '9px sans-serif';
+  const nw = ctx.measureText(npc.name).width + 6;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(cx - nw/2, cy + r + 1, nw, 11);
+  ctx.fillStyle = '#ddd';
+  ctx.textAlign = 'center';
+  ctx.fillText(npc.name, cx, cy + r + 7);
+
+  // Speech bubble
+  const age = tick - npc.last_message_tick;
+  if (npc.last_message && age < 8) {
+    const alpha = Math.max(0, 1 - age / 8);
+    const msg = npc.last_message.substring(0, 22) + (npc.last_message.length > 22 ? '…' : '');
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '8px sans-serif';
+    const mw = Math.min(ctx.measureText(msg).width + 10, 130);
+    let bx = cx - mw/2, by = cy - r - 24;
+    bx = Math.max(2, Math.min(bx, canvas.width - mw - 2));
+    by = Math.max(2, by);
+    ctx.fillStyle = 'rgba(15,25,50,0.92)';
+    rrect(ctx, bx, by, mw, 14, 3);
+    ctx.fill();
+    ctx.strokeStyle = npc.color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#cce8ff';
+    ctx.textAlign = 'left';
+    ctx.fillText(msg, bx + 5, by + 9);
+    ctx.restore();
+  }
+}
+
+function rrect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
+  c.closePath();
+}
+
+function initRain(count) {
+  rainDrops = Array.from({length: count}, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    speed: 2 + Math.random() * 3,
+    len: 6 + Math.random() * 8,
+  }));
+}
+
+function drawWeather(weather) {
+  if (weather === 'rainy' || weather === 'storm') {
+    const cnt = weather === 'storm' ? 120 : 60;
+    if (rainDrops.length !== cnt) initRain(cnt);
+    ctx.strokeStyle = weather === 'storm'
+      ? 'rgba(150,200,255,0.55)' : 'rgba(150,200,255,0.3)';
+    ctx.lineWidth = 1;
+    for (const d of rainDrops) {
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.len*0.3, d.y + d.len);
+      ctx.stroke();
+      d.x -= d.speed * 0.3; d.y += d.speed;
+      if (d.y > canvas.height) { d.y = -10; d.x = Math.random() * canvas.width; }
+      if (d.x < 0) d.x = canvas.width;
+    }
+    if (weather === 'storm') {
+      ctx.fillStyle = 'rgba(20,0,50,0.12)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (Math.random() < 0.008) {
+        ctx.fillStyle = 'rgba(200,220,255,0.25)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
   } else {
-    tooltip.style.display = 'none';
+    rainDrops = [];
+  }
+}
+
+// Animation loop
+(function loop() {
+  if (worldState) render(worldState);
+  requestAnimationFrame(loop);
+})();
+
+// ── Canvas interaction ─────────────────────────────────────────────────────
+canvas.addEventListener('click', e => {
+  if (!spawnType) return;
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+  const tx = Math.floor((e.clientX - rect.left) * sx / TILE_SIZE);
+  const ty = Math.floor((e.clientY - rect.top)  * sy / TILE_SIZE);
+  spawnPos = { x: tx, y: ty };
+  document.getElementById('spawn-pos').textContent = `(${tx}, ${ty})`;
+  document.getElementById('spawn-confirm-wrap').style.display = 'inline';
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!worldState) return;
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+  const tx = Math.floor((e.clientX - rect.left) * sx / TILE_SIZE);
+  const ty = Math.floor((e.clientY - rect.top)  * sy / TILE_SIZE);
+  const tile = worldState.tiles.find(t => t.x === tx && t.y === ty);
+  if (tile) {
+    let info = `(${tx},${ty}) ${tile.t}`;
+    if (tile.r) info += ` ${RESOURCE_ICONS[tile.r]}×${tile.q}`;
+    if (tile.e) info += ' 🏛交易所';
+    document.getElementById('canvas-overlay').textContent = info;
   }
 });
 
-canvas.addEventListener('mouseleave', () => {
-  document.getElementById('tooltip').style.display = 'none';
-});
-
-// ═══════════════════════════════════════════════════════
-// God controls
-// ═══════════════════════════════════════════════════════
-function setWeather(weather) {
-  sendMsg({ type: 'god_command', command: 'set_weather', value: weather });
-  setStatus(`上帝指令: 天气 → ${weather}`);
+// ── God controls ──────────────────────────────────────────────────────────
+function setWeather(w) {
+  sendMsg({ type:'god_command', command:'set_weather', value:w });
 }
 
-function prepareSpawn(type) {
-  state.spawnMode = type;
-  state.selectedTile = null;
-  document.getElementById('spawn-hint').textContent = '(点击地图选择位置)';
-  // Update button states
-  ['wood','stone','ore'].forEach(t => {
-    document.getElementById(`spawn-${t}-btn`).classList.toggle('active', t === type);
-  });
+function selectSpawn(type, btn) {
+  spawnType = type; spawnPos = null;
+  document.getElementById('spawn-pos').textContent = '点击地图选择';
+  document.getElementById('spawn-confirm-wrap').style.display = 'none';
+  document.querySelectorAll('#spawn-btns .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 }
 
-function executeSpawn(x, y) {
-  if (!state.spawnMode) return;
-  sendMsg({ type: 'god_command', command: 'spawn_resource', resource_type: state.spawnMode, x, y, quantity: 8 });
-  setStatus(`上帝指令: 在[${x},${y}]刷新 ${state.spawnMode}`);
-  state.spawnMode = null;
-  state.selectedTile = null;
-  document.getElementById('spawn-hint').textContent = '(先选地块)';
-  ['wood','stone','ore'].forEach(t => document.getElementById(`spawn-${t}-btn`).classList.remove('active'));
+function confirmSpawn() {
+  if (!spawnType || !spawnPos) return;
+  sendMsg({ type:'god_command', command:'spawn_resource',
+            resource_type:spawnType, x:spawnPos.x, y:spawnPos.y, quantity:5 });
+  spawnType = null; spawnPos = null;
+  document.getElementById('spawn-pos').textContent = '未选择';
+  document.getElementById('spawn-confirm-wrap').style.display = 'none';
+  document.querySelectorAll('#spawn-btns .btn').forEach(b => b.classList.remove('active'));
 }
 
-// ═══════════════════════════════════════════════════════
-// Game control
-// ═══════════════════════════════════════════════════════
-document.getElementById('pause-btn').onclick = () => {
-  const paused = document.getElementById('pause-btn').classList.contains('paused');
-  if (paused) resumeGame();
-  else sendMsg({ type: 'control', command: 'pause' });
-};
+function sendControl(cmd) { sendMsg({ type:'control', command:cmd }); }
 
-function resumeGame() {
-  const newLimit = parseInt(document.getElementById('new-limit-input').value) || 0;
-  if (newLimit > 0) {
-    sendMsg({ type: 'control', command: 'set_limit', value: newLimit });
+function applyNewLimit() {
+  const v = parseInt(document.getElementById('new-limit-input').value);
+  if (v > 0) {
+    sendMsg({ type:'control', command:'set_limit', value:v });
+    sendMsg({ type:'control', command:'resume' });
   }
-  sendMsg({ type: 'control', command: 'resume' });
-  document.getElementById('paused-overlay').classList.remove('show');
 }
 
-// ═══════════════════════════════════════════════════════
-// Status bar
-// ═══════════════════════════════════════════════════════
-function setStatus(msg, isError = false) {
-  const bar = document.getElementById('status-bar');
-  bar.textContent = msg;
-  bar.className = isError ? 'error' : '';
+// ── Tabs ──────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['god','npcs','settings'];
+function showTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) =>
+    b.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'settings') loadSettings();
 }
 
-// ═══════════════════════════════════════════════════════
-// Init
-// ═══════════════════════════════════════════════════════
+// ── Settings ──────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    const d = await r.json();
+    const st = document.getElementById('api-key-status');
+    st.textContent = d.api_key_set ? '✓ 已设置' : '未设置（使用 .env 中的值）';
+    st.className = 'api-key-status ' + (d.api_key_set ? 'set' : 'unset');
+    if (d.model_name) {
+      const sel = document.getElementById('model-select');
+      const opt = [...sel.options].find(o => o.value === d.model_name);
+      if (opt) sel.value = d.model_name;
+    }
+    if (d.token_limit) {
+      document.getElementById('token-limit-slider').value = d.token_limit;
+      document.getElementById('token-limit-display').textContent = formatNum(d.token_limit);
+    }
+  } catch {}
+}
+
+async function saveSettings() {
+  const apiKey = document.getElementById('api-key-input').value.trim();
+  const modelName = document.getElementById('model-select').value;
+  const tokenLimit = parseInt(document.getElementById('token-limit-slider').value);
+  const body = { model_name:modelName, token_limit:tokenLimit };
+  if (apiKey) body.api_key = apiKey;
+  try {
+    const r = await fetch('/api/settings', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const m = document.getElementById('settings-msg');
+      m.style.display = 'block';
+      m.textContent = '✓ 设置已保存';
+      setTimeout(() => m.style.display='none', 2500);
+      if (apiKey) { document.getElementById('api-key-input').value=''; loadSettings(); }
+    }
+  } catch {}
+}
+
+function toggleApiKeyVisibility() {
+  const inp = document.getElementById('api-key-input');
+  inp.type = inp.type==='password' ? 'text' : 'password';
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function formatNum(n) { return Number(n).toLocaleString(); }
+function fmtK(n) {
+  if (n>=1e6) return (n/1e6).toFixed(1)+'M';
+  if (n>=1000) return (n/1000).toFixed(0)+'k';
+  return String(n);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
 connectWS();
-
-// Periodic re-render for animations even without new WS data
-setInterval(() => {
-  if (state.world && (state.world.npcs || []).some(n => n.is_processing)) {
-    renderWorld(state.world);
-  }
-}, 200);
 </script>
 </body>
 </html>

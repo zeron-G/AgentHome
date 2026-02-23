@@ -6,10 +6,11 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import config
 from game.loop import GameLoop
 
 logging.basicConfig(
@@ -30,6 +31,39 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 @app.get("/")
 async def index():
     return FileResponse(str(FRONTEND_DIR / "index.html"))
+
+
+# ── Settings API ──────────────────────────────────────────────────────────────
+
+@app.get("/api/settings")
+async def get_settings():
+    return JSONResponse({
+        "api_key_set": bool(config.GEMINI_API_KEY),
+        "model_name": config.MODEL_NAME,
+        "token_limit": game_loop.token_tracker.session_limit,
+    })
+
+
+@app.post("/api/settings")
+async def post_settings(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+
+    if "api_key" in data and str(data["api_key"]).strip():
+        game_loop.update_api_key(str(data["api_key"]).strip())
+
+    if "model_name" in data and str(data["model_name"]).strip():
+        config.MODEL_NAME = str(data["model_name"]).strip()
+
+    if "token_limit" in data:
+        try:
+            game_loop.token_tracker.set_limit(int(data["token_limit"]))
+        except (ValueError, TypeError):
+            pass
+
+    return JSONResponse({"ok": True})
 
 
 # ── WebSocket endpoint ────────────────────────────────────────────────────────

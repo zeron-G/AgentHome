@@ -18,6 +18,10 @@ class EventType(str, Enum):
     NPC_TRADED = "npc_traded"
     NPC_RESTED = "npc_rested"
     NPC_THOUGHT = "npc_thought"
+    NPC_ATE = "npc_ate"
+    NPC_SLEPT = "npc_slept"
+    NPC_EXCHANGED = "npc_exchanged"
+    NPC_BOUGHT_FOOD = "npc_bought_food"
     WEATHER_CHANGED = "weather_changed"
     RESOURCE_SPAWNED = "resource_spawned"
     RESOURCE_DEPLETED = "resource_depleted"
@@ -77,6 +81,19 @@ class WorldEvent:
 
         elif et == EventType.RESOURCE_DEPLETED:
             return f"({self.origin_x},{self.origin_y}) 的资源已耗尽"
+
+        elif et == EventType.NPC_ATE:
+            return f"{actor_name} 吃了食物，恢复了 {p.get('amount', 0)} 点体力"
+
+        elif et == EventType.NPC_SLEPT:
+            return f"{actor_name} 睡了一觉，恢复了 {p.get('amount', 0)} 点体力"
+
+        elif et == EventType.NPC_EXCHANGED:
+            return (f"{actor_name} 在交易所用 {p.get('qty',0)} {p.get('item','?')} "
+                    f"换取了 {p.get('gold',0)} 金币")
+
+        elif et == EventType.NPC_BOUGHT_FOOD:
+            return f"{actor_name} 在交易所花费 {p.get('gold_spent',0)} 金币购买了 {p.get('qty',0)} 食物"
 
         elif et == EventType.GOD_COMMENTARY:
             return f"[上帝旁白] {p.get('commentary','')}"

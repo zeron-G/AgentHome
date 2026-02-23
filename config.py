@@ -3,9 +3,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# LLM
+# LLM provider: "gemini" (cloud) or "local" (OpenAI-compatible local server)
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")
+
+# Gemini (cloud)
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Local LLM (Ollama / LM Studio / llama.cpp / vLLM / any OpenAI-compatible server)
+LOCAL_LLM_BASE_URL: str = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
+LOCAL_LLM_MODEL: str = os.getenv("LOCAL_LLM_MODEL", "llama3")
 
 # World
 WORLD_WIDTH: int = 20

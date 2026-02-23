@@ -450,28 +450,58 @@
 
     <!-- Settings Tab -->
     <div id="tab-settings" class="tab-content">
-      <div class="panel-section">
-        <h3>🔑 Gemini API Key</h3>
-        <div class="setting-row">
-          <label>API Key（设置后覆盖 .env 文件）</label>
-          <div class="api-key-wrap">
-            <input type="password" id="api-key-input" class="setting-input" placeholder="AIzaSy...">
-            <button class="btn" onclick="toggleApiKeyVisibility()" title="显示/隐藏">👁</button>
-          </div>
-          <div id="api-key-status" class="api-key-status unset">未检测到（使用 .env 中的值）</div>
-        </div>
-      </div>
 
+      <!-- Provider selector -->
       <div class="panel-section">
-        <h3>🤖 模型</h3>
-        <div class="setting-row">
-          <label>Gemini 模型名称</label>
-          <select id="model-select" class="setting-input">
-            <option value="gemini-2.5-flash">gemini-2.5-flash（推荐）</option>
-            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-          </select>
+        <h3>🔌 LLM 提供商</h3>
+        <div class="btn-group" style="margin-bottom:8px">
+          <button class="btn active" id="provider-gemini" onclick="selectProvider('gemini')">☁ Gemini API</button>
+          <button class="btn" id="provider-local" onclick="selectProvider('local')">🖥 本地模型</button>
+        </div>
+
+        <!-- Gemini settings (shown when provider=gemini) -->
+        <div id="gemini-settings">
+          <div class="setting-row">
+            <label>Gemini API Key（设置后覆盖 .env 文件）</label>
+            <div class="api-key-wrap">
+              <input type="password" id="api-key-input" class="setting-input" placeholder="AIzaSy...">
+              <button class="btn" onclick="toggleApiKeyVisibility()" title="显示/隐藏">👁</button>
+            </div>
+            <div id="api-key-status" class="api-key-status unset">未检测到（使用 .env 中的值）</div>
+          </div>
+          <div class="setting-row">
+            <label>Gemini 模型</label>
+            <select id="model-select" class="setting-input">
+              <option value="gemini-2.5-flash">gemini-2.5-flash（推荐）</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Local LLM settings (shown when provider=local) -->
+        <div id="local-settings" style="display:none">
+          <div style="font-size:11px;color:#888;margin-bottom:8px;line-height:1.6">
+            支持 <b>Ollama</b>、<b>LM Studio</b>、<b>llama.cpp</b>、<b>vLLM</b> 等兼容 OpenAI API 的本地服务。
+          </div>
+          <div class="setting-row">
+            <label>Base URL（本地服务地址）</label>
+            <input type="text" id="local-url-input" class="setting-input"
+                   placeholder="http://localhost:11434/v1">
+            <div style="font-size:10px;color:#666;margin-top:2px">
+              Ollama: <code style="color:#8af">:11434/v1</code> &nbsp;|&nbsp;
+              LM Studio: <code style="color:#8af">:1234/v1</code>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label>模型名称</label>
+            <input type="text" id="local-model-input" class="setting-input"
+                   placeholder="llama3 / qwen2.5 / mistral ...">
+          </div>
+          <div style="font-size:11px;color:#fa8;margin-top:4px">
+            ⚠ 本地模型需支持 JSON 输出模式，建议使用 7B+ 参数量的指令模型。
+          </div>
         </div>
       </div>
 
@@ -922,10 +952,26 @@ function showTab(name) {
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────
+let currentProvider = 'gemini';
+
+function selectProvider(p) {
+  currentProvider = p;
+  document.getElementById('provider-gemini').classList.toggle('active', p === 'gemini');
+  document.getElementById('provider-local').classList.toggle('active', p === 'local');
+  document.getElementById('gemini-settings').style.display = p === 'gemini' ? '' : 'none';
+  document.getElementById('local-settings').style.display  = p === 'local'  ? '' : 'none';
+}
+
 async function loadSettings() {
   try {
     const r = await fetch('/api/settings');
     const d = await r.json();
+
+    // Provider
+    const prov = d.llm_provider || 'gemini';
+    selectProvider(prov);
+
+    // Gemini
     const st = document.getElementById('api-key-status');
     st.textContent = d.api_key_set ? '✓ 已设置' : '未设置（使用 .env 中的值）';
     st.className = 'api-key-status ' + (d.api_key_set ? 'set' : 'unset');
@@ -934,6 +980,14 @@ async function loadSettings() {
       const opt = [...sel.options].find(o => o.value === d.model_name);
       if (opt) sel.value = d.model_name;
     }
+
+    // Local LLM
+    if (d.local_llm_base_url)
+      document.getElementById('local-url-input').value = d.local_llm_base_url;
+    if (d.local_llm_model)
+      document.getElementById('local-model-input').value = d.local_llm_model;
+
+    // Token limit
     if (d.token_limit) {
       document.getElementById('token-limit-slider').value = d.token_limit;
       document.getElementById('token-limit-display').textContent = formatNum(d.token_limit);
@@ -942,11 +996,19 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  const apiKey = document.getElementById('api-key-input').value.trim();
-  const modelName = document.getElementById('model-select').value;
   const tokenLimit = parseInt(document.getElementById('token-limit-slider').value);
-  const body = { model_name:modelName, token_limit:tokenLimit };
-  if (apiKey) body.api_key = apiKey;
+  const body = { llm_provider: currentProvider, token_limit: tokenLimit };
+
+  if (currentProvider === 'gemini') {
+    const apiKey = document.getElementById('api-key-input').value.trim();
+    const modelName = document.getElementById('model-select').value;
+    if (apiKey) body.api_key = apiKey;
+    body.model_name = modelName;
+  } else {
+    body.local_llm_base_url = document.getElementById('local-url-input').value.trim();
+    body.local_llm_model    = document.getElementById('local-model-input').value.trim();
+  }
+
   try {
     const r = await fetch('/api/settings', {
       method:'POST',
@@ -957,9 +1019,11 @@ async function saveSettings() {
     if (d.ok) {
       const m = document.getElementById('settings-msg');
       m.style.display = 'block';
-      m.textContent = '✓ 设置已保存';
-      setTimeout(() => m.style.display='none', 2500);
-      if (apiKey) { document.getElementById('api-key-input').value=''; loadSettings(); }
+      m.textContent = currentProvider === 'local'
+        ? `✓ 已切换到本地模型 (${body.local_llm_model || '?'})`
+        : '✓ 设置已保存';
+      setTimeout(() => m.style.display='none', 3000);
+      if (body.api_key) { document.getElementById('api-key-input').value=''; loadSettings(); }
     }
   } catch {}
 }

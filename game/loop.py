@@ -76,6 +76,26 @@ class GameLoop:
         self.npc_agent.update_api_key(new_key)
         self.god_agent.update_api_key(new_key)
 
+    def update_provider(
+        self,
+        provider: str,
+        local_url: str | None = None,
+        local_model: str | None = None,
+    ):
+        """Switch LLM provider at runtime ('gemini' or 'local')."""
+        config.LLM_PROVIDER = provider
+        if local_url:
+            config.LOCAL_LLM_BASE_URL = local_url
+            self.npc_agent.reset_local_client()
+            self.god_agent.reset_local_client()
+        if local_model:
+            config.LOCAL_LLM_MODEL = local_model
+        logger.info(
+            f"LLM provider → {provider}"
+            + (f"  model={config.LOCAL_LLM_MODEL}  url={config.LOCAL_LLM_BASE_URL}"
+               if provider == "local" else "")
+        )
+
     # ── World tick loop ───────────────────────────────────────────────────────
 
     async def _world_tick_loop(self):

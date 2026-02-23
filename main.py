@@ -41,6 +41,9 @@ async def get_settings():
         "api_key_set": bool(config.GEMINI_API_KEY),
         "model_name": config.MODEL_NAME,
         "token_limit": game_loop.token_tracker.session_limit,
+        "llm_provider": config.LLM_PROVIDER,
+        "local_llm_base_url": config.LOCAL_LLM_BASE_URL,
+        "local_llm_model": config.LOCAL_LLM_MODEL,
     })
 
 
@@ -51,17 +54,28 @@ async def post_settings(request: Request):
     except Exception:
         return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
 
+    # Gemini API key
     if "api_key" in data and str(data["api_key"]).strip():
         game_loop.update_api_key(str(data["api_key"]).strip())
 
+    # Gemini model name
     if "model_name" in data and str(data["model_name"]).strip():
         config.MODEL_NAME = str(data["model_name"]).strip()
 
+    # Token limit
     if "token_limit" in data:
         try:
             game_loop.token_tracker.set_limit(int(data["token_limit"]))
         except (ValueError, TypeError):
             pass
+
+    # LLM provider switch (gemini / local)
+    if "llm_provider" in data:
+        provider = str(data["llm_provider"]).strip()
+        if provider in ("gemini", "local"):
+            local_url = str(data.get("local_llm_base_url", "") or "").strip() or None
+            local_model = str(data.get("local_llm_model", "") or "").strip() or None
+            game_loop.update_provider(provider, local_url, local_model)
 
     return JSONResponse({"ok": True})
 

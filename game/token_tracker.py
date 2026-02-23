@@ -37,15 +37,19 @@ class TokenTracker:
         """Record token usage from a Gemini response. Returns tokens used."""
         prompt_t = getattr(usage_metadata, "prompt_token_count", 0) or 0
         completion_t = getattr(usage_metadata, "candidates_token_count", 0) or 0
-        total_t = prompt_t + completion_t
+        return await self.record_raw(agent_id, prompt_t, completion_t)
+
+    async def record_raw(self, agent_id: str, prompt_tokens: int, completion_tokens: int) -> int:
+        """Record token usage from raw counts (for OpenAI-compatible responses)."""
+        total_t = prompt_tokens + completion_tokens
 
         async with self._lock:
             if agent_id not in self._per_agent:
                 self._per_agent[agent_id] = AgentTokenUsage()
-            self._per_agent[agent_id].prompt_tokens += prompt_t
-            self._per_agent[agent_id].completion_tokens += completion_t
-            self._total.prompt_tokens += prompt_t
-            self._total.completion_tokens += completion_t
+            self._per_agent[agent_id].prompt_tokens += prompt_tokens
+            self._per_agent[agent_id].completion_tokens += completion_tokens
+            self._total.prompt_tokens += prompt_tokens
+            self._total.completion_tokens += completion_tokens
 
             if self._total.total >= self.session_limit and not self._paused:
                 self._paused = True

@@ -164,7 +164,7 @@ class BaseAgent:
                 messages=messages,
                 temperature=config.LLM_TEMPERATURE,
                 max_tokens=config.LLM_MAX_TOKENS,
-                response_format={"type": "json_object"},
+                # response_format={"type": "json_object"}, 最高兼容性
             )
 
             # Track tokens (OpenAI usage format)

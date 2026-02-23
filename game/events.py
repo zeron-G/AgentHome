@@ -27,6 +27,11 @@ class EventType(str, Enum):
     RESOURCE_DEPLETED = "resource_depleted"
     TIME_ADVANCED = "time_advanced"
     GOD_COMMENTARY = "god_commentary"
+    # Player events
+    PLAYER_MOVED = "player_moved"
+    PLAYER_GATHERED = "player_gathered"
+    PLAYER_SPOKE = "player_spoke"
+    PLAYER_TRADED = "player_traded"
 
 
 @dataclass
@@ -43,8 +48,11 @@ class WorldEvent:
         """Convert event to a readable string for NPC inbox/context."""
         actor_name = ""
         if self.actor_id:
-            npc = world.get_npc(self.actor_id)
-            actor_name = npc.name if npc else self.actor_id
+            if self.actor_id == "player":
+                actor_name = world.player.name if world.player else "玩家"
+            else:
+                npc = world.get_npc(self.actor_id)
+                actor_name = npc.name if npc else self.actor_id
 
         et = self.event_type
         p = self.payload
@@ -52,9 +60,12 @@ class WorldEvent:
         if et == EventType.NPC_SPOKE:
             target = p.get("target_id")
             target_name = ""
-            if target:
+            if target and target != "player":
                 tn = world.get_npc(target)
                 target_name = f" (对{tn.name}说)" if tn else ""
+            elif target == "player":
+                pname = world.player.name if world.player else "玩家"
+                target_name = f" (对{pname}说)"
             return f"{actor_name}{target_name}: \"{p.get('message', '')}\""
 
         elif et == EventType.NPC_MOVED:
@@ -98,6 +109,28 @@ class WorldEvent:
         elif et == EventType.GOD_COMMENTARY:
             return f"[上帝旁白] {p.get('commentary','')}"
 
+        elif et == EventType.PLAYER_MOVED:
+            return f"[玩家] {p.get('name', actor_name)} 移动到 ({self.origin_x},{self.origin_y})"
+
+        elif et == EventType.PLAYER_GATHERED:
+            return f"[玩家] {p.get('name', actor_name)} 采集了 {p.get('amount',0)} {p.get('resource','?')}"
+
+        elif et == EventType.PLAYER_SPOKE:
+            target = p.get("target_id")
+            target_name = ""
+            if target:
+                tn = world.get_npc(target)
+                target_name = f" (对{tn.name}说)" if tn else f" (对{target}说)"
+            return f"[玩家] {p.get('name', actor_name)}{target_name}: \"{p.get('message', '')}\""
+
+        elif et == EventType.PLAYER_TRADED:
+            with_name = ""
+            wid = p.get("with")
+            if wid:
+                wn = world.get_npc(wid)
+                with_name = wn.name if wn else wid
+            return (f"[玩家] {p.get('name', actor_name)} 与 {with_name} 交易")
+
         return str(et)
 
     def to_dict(self, world: "World") -> dict:
@@ -109,8 +142,11 @@ class WorldEvent:
             "summary": self.to_summary(world),
         }
         if self.actor_id:
-            npc = world.get_npc(self.actor_id)
-            d["actor"] = npc.name if npc else self.actor_id
+            if self.actor_id == "player":
+                d["actor"] = world.player.name if world.player else "玩家"
+            else:
+                npc = world.get_npc(self.actor_id)
+                d["actor"] = npc.name if npc else self.actor_id
         d.update(self.payload)
         return d
 

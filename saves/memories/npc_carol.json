@@ -1,0 +1,210 @@
+[
+  {
+    "record_id": "96fc32de",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 嗯，这里是森林，先收集一些木头，为交易所的囤金大业做准备。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838394.8162177,
+    "tick": 7,
+    "location": [
+      6,
+      14
+    ]
+  },
+  {
+    "record_id": "d5a85bee",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 我当前地块没有资源了，得找个有木头的地方继续收集，为去交易所做准备。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838403.2709904,
+    "tick": 10,
+    "location": [
+      6,
+      14
+    ]
+  },
+  {
+    "record_id": "fa35c32f",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 很好，这里有木头了。先收集一些，然后就可以考虑去交易所换取金币了。玩家刚才似乎在采集食物，他们的策略是什么呢？",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838411.489121,
+    "tick": 13,
+    "location": [
+      7,
+      14
+    ]
+  },
+  {
+    "record_id": "670cd99f",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 嗯，玩家看起来在远方，Alice倒是挺活跃的。我还是专注于收集木头吧，这些木头很快就能变成金币了。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838419.6872432,
+    "tick": 15,
+    "location": [
+      7,
+      14
+    ]
+  },
+  {
+    "record_id": "5325045f",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 嗯，这最后一点木头也别浪费了。有了5个木头，就可以动身去交易所了。玩家和Alice在聊天，看来他们各有各的打算。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838428.3612602,
+    "tick": 18,
+    "location": [
+      7,
+      14
+    ]
+  },
+  {
+    "record_id": "e4b3b08f",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 我终于攒够了5个木头，现在是时候去交易所把它们换成金币了。玩家和Alice还在聊着，我得赶在他们之前去交易所看看行情。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838438.6587718,
+    "tick": 22,
+    "location": [
+      7,
+      14
+    ]
+  },
+  {
+    "record_id": "7fc5b500",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 交易所就在不远处了，我已经能看到城镇的边界。快点过去把这些木头换成金币，囤积财富才是我的乐趣。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771838447.7877629,
+    "tick": 25,
+    "location": [
+      8,
+      13
+    ]
+  },
+  {
+    "record_id": "9de06244",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 交易所就在眼前了！赶紧过去，把这些木头换成金币，我的金库又可以壮大一些了。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771838457.1358955,
+    "tick": 28,
+    "location": [
+      9,
+      12
+    ]
+  },
+  {
+    "record_id": "e7869e3c",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 交易所就在我正前方了，再走一步就到了。这些木头终于可以变成金币了！",
+    "tags": [
+      "move",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771838467.3631067,
+    "tick": 31,
+    "location": [
+      10,
+      12
+    ]
+  },
+  {
+    "record_id": "9eff6bf7",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 终于到了城镇中心，交易所就在我眼前。赶紧把这些木头换成金币，我的金库又可以充实了！体力有点低了，换完金币可以考虑买点食物。",
+    "tags": [
+      "move",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771838476.071822,
+    "tick": 34,
+    "location": [
+      10,
+      11
+    ]
+  },
+  {
+    "record_id": "2ef275b5",
+    "npc_id": "npc_carol",
+    "content": "行动: talk | 说: 你好啊，玩家。看来你和Bob都在忙着交易呢。我正好也要来把这些木头换成金币。",
+    "tags": [
+      "talk",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838488.4165704,
+    "tick": 38,
+    "location": [
+      10,
+      10
+    ]
+  },
+  {
+    "record_id": "33abd2c8",
+    "npc_id": "npc_carol",
+    "content": "行动: exchange",
+    "tags": [
+      "exchange",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838495.4875848,
+    "tick": 41,
+    "location": [
+      10,
+      10
+    ]
+  },
+  {
+    "record_id": "22f37532",
+    "npc_id": "npc_carol",
+    "content": "行动: buy_food",
+    "tags": [
+      "buy_food",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838507.752527,
+    "tick": 45,
+    "location": [
+      10,
+      10
+    ]
+  }
+]

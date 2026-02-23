@@ -45,6 +45,7 @@ class Tile:
     resource: Optional[Resource] = None
     npc_ids: list = field(default_factory=list)
     is_exchange: bool = False   # marks the exchange building tile
+    player_here: bool = False   # player occupies this tile
 
 
 @dataclass
@@ -137,6 +138,22 @@ class NPC:
     last_message: str = ""
     last_message_tick: int = -99
     energy: int = 100
+    last_thought: str = ""   # inner monologue from last LLM decision
+
+
+@dataclass
+class Player:
+    """Human player character in the world."""
+    player_id: str = "player"
+    name: str = field(default_factory=lambda: config.PLAYER_NAME)
+    x: int = field(default_factory=lambda: config.PLAYER_START_X)
+    y: int = field(default_factory=lambda: config.PLAYER_START_Y)
+    inventory: Inventory = field(default_factory=Inventory)
+    energy: int = 100
+    is_god_mode: bool = False
+    last_action: str = "idle"
+    last_message: str = ""
+    inbox: list = field(default_factory=list)  # messages received from NPCs
 
 
 @dataclass
@@ -157,6 +174,7 @@ class World:
     time: WorldTime = field(default_factory=WorldTime)
     npcs: list = field(default_factory=list)    # list[NPC]
     god: GodEntity = field(default_factory=GodEntity)
+    player: Optional[Player] = None             # human player (None if disabled)
     recent_events: list = field(default_factory=list)  # global event log (last 30)
 
     def get_tile(self, x: int, y: int) -> Optional[Tile]:
@@ -167,7 +185,13 @@ class World:
     def get_npc(self, npc_id: str) -> Optional[NPC]:
         return next((n for n in self.npcs if n.npc_id == npc_id), None)
 
-    def get_nearby_npcs(self, npc: NPC, radius: int) -> list:
+    def get_nearby_npcs(self, x: int, y: int, radius: int) -> list:
+        return [
+            n for n in self.npcs
+            if abs(n.x - x) + abs(n.y - y) <= radius
+        ]
+
+    def get_nearby_npcs_for_npc(self, npc: NPC, radius: int) -> list:
         return [
             n for n in self.npcs
             if n.npc_id != npc.npc_id
@@ -266,6 +290,13 @@ def create_world(seed: int = 42) -> World:
         tiles[sy][sx].tile_type = TileType.GRASS
         tiles[sy][sx].resource = None
 
+    # Ensure player spawn point is clear
+    px, py = config.PLAYER_START_X, config.PLAYER_START_Y
+    if 0 <= px < width and 0 <= py < height:
+        if tiles[py][px].tile_type in (TileType.WATER, TileType.ROCK):
+            tiles[py][px].tile_type = TileType.GRASS
+        tiles[py][px].resource = None
+
     # Create NPCs
     npcs = [
         NPC(
@@ -303,10 +334,18 @@ def create_world(seed: int = 42) -> World:
         tile = tiles[npc.y][npc.x]
         tile.npc_ids.append(npc.npc_id)
 
+    # Create player if enabled
+    player = None
+    if config.PLAYER_ENABLED:
+        player = Player()
+        if 0 <= player.x < width and 0 <= player.y < height:
+            tiles[player.y][player.x].player_here = True
+
     return World(
         width=width,
         height=height,
         tiles=tiles,
         npcs=npcs,
         god=GodEntity(),
+        player=player,
     )

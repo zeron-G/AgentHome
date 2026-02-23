@@ -1,0 +1,194 @@
+[
+  {
+    "record_id": "dc83b7de",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 森林就在附近，是时候去采集一些木头了。",
+    "tags": [
+      "move",
+      "dawn",
+      "sunny"
+    ],
+    "timestamp": 1771838381.6508234,
+    "tick": 3,
+    "location": [
+      14,
+      5
+    ]
+  },
+  {
+    "record_id": "3e209a89",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 森林就在西边，我得过去采集木头。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838391.179316,
+    "tick": 6,
+    "location": [
+      13,
+      4
+    ]
+  },
+  {
+    "record_id": "2fc93594",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 我看到木头了，向西走一步就能采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838403.7896717,
+    "tick": 10,
+    "location": [
+      12,
+      4
+    ]
+  },
+  {
+    "record_id": "f32d9112",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 我已到达森林边缘，现在可以采集木头了。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838413.4934862,
+    "tick": 13,
+    "location": [
+      11,
+      4
+    ]
+  },
+  {
+    "record_id": "bed0c5a2",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 我已身处森林，是时候采集木头了。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838423.960762,
+    "tick": 17,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "4413583a",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 继续采集木头，多储备些资源。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838431.8414903,
+    "tick": 19,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "a2939d47",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 继续采集木头，体力尚可。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838440.6013014,
+    "tick": 22,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "d166f278",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 木头还有一些，继续采集。体力还能支撑。",
+    "tags": [
+      "gather",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771838452.116885,
+    "tick": 26,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "a49ec931",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 还有一点木头，采集完就去城镇卖掉。体力有点低，需要补充。",
+    "tags": [
+      "gather",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771838466.3442638,
+    "tick": 31,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "7ff72db3",
+    "npc_id": "npc_bob",
+    "content": "行动: talk | 说: 你好，Alice。我采集了些木头，正要去城镇交易所卖掉。",
+    "tags": [
+      "talk",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771838476.3845856,
+    "tick": 34,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "afea4ec0",
+    "npc_id": "npc_bob",
+    "content": "行动: talk | 说: 你好，玩家。我有些木头要拿到交易所卖掉。",
+    "tags": [
+      "talk",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838484.8368702,
+    "tick": 37,
+    "location": [
+      10,
+      4
+    ]
+  },
+  {
+    "record_id": "0fa1d53d",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 体力很低，得赶紧去城镇，把木头卖掉，然后休息。",
+    "tags": [
+      "move",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838490.1077888,
+    "tick": 39,
+    "location": [
+      10,
+      4
+    ]
+  }
+]

@@ -16,7 +16,7 @@ class NPCAction(BaseModel):
     # move
     dx: Optional[int] = None
     dy: Optional[int] = None
-    # move / gather / rest / eat / sleep
+    # inner monologue (optional for any action)
     thought: Optional[str] = None
     # talk / interrupt
     message: Optional[str] = None
@@ -63,6 +63,7 @@ NPC_SYSTEM_PROMPT = """你是{name}，一个生活在2D沙盒世界里的NPC。
 - eat：消耗1个库存食物，回复30点体力（需先采集食物或购买）
 - think可记录个人笔记（只有你自己能看到）
 - 交易时只能给出自己实际拥有的物品
+- 世界中还有一位玩家，target_id为"player"，可以与其说话(talk)
 
 【城镇与交易所】
 - 城镇中心有一个交易所，位于({exchange_x},{exchange_y})
@@ -70,6 +71,10 @@ NPC_SYSTEM_PROMPT = """你是{name}，一个生活在2D沙盒世界里的NPC。
   - exchange：用资源换金币（木头=1金/个，石头=2金/个，矿石=5金/个）
   - buy_food：花3金购买1个食物（quantity字段指定购买数量）
 - 金币只能在交易所获得，可以买食物补充体力
+
+【视野说明】
+- 你只能看到自己周围5×5范围内的地块（当前状态中的"视野"部分）
+- 超出视野范围的情况你无法直接观察，但可以根据记忆推断
 
 【社交行为要求】
 - 你是有个性的角色，要主动与周围NPC互动
@@ -100,13 +105,19 @@ NPC_CONTEXT_SOCIAL = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weath
 背包: 木头={wood}, 石头={stone}, 矿石={ore}, 食物={food}, 金币={gold}
 当前地块: {tile_type}  资源: {resource_info}
 {exchange_hint}
+=== 视野 (5×5范围) ===
+{vision_grid}
+
 附近的NPC ({radius}格内):
 {nearby_npcs}
 
 === 你的个人笔记 ===
 {notes}
 
-=== 收件箱（其他NPC最近说的话/事件）===
+=== 相关记忆 ===
+{rag_memories}
+
+=== 收件箱（其他NPC/玩家最近说的话/事件）===
 {inbox}
 
 === 近期可见事件 ===
@@ -122,10 +133,16 @@ NPC_CONTEXT_ALONE = """=== 当前状态 (Tick {tick}, {time_str}, 天气:{weathe
 背包: 木头={wood}, 石头={stone}, 矿石={ore}, 食物={food}, 金币={gold}
 当前地块: {tile_type}  资源: {resource_info}
 {exchange_hint}
+=== 视野 (5×5范围) ===
+{vision_grid}
+
 周围没有其他NPC。
 
 === 你的个人笔记 ===
 {notes}
+
+=== 相关记忆 ===
+{rag_memories}
 
 === 近期可见事件 ===
 {recent_events}
@@ -165,6 +182,75 @@ NPC状态概览:
 作为神明，你如何干预这个世界？返回一个JSON动作。"""
 
 
+# ── Vision grid builder ───────────────────────────────────────────────────────
+
+# Tile display chars for vision grid
+_TILE_CHARS = {
+    "grass": "·",
+    "water": "≈",
+    "rock": "▲",
+    "forest": "♣",
+    "town": "⌂",
+}
+_RESOURCE_CHARS = {
+    "wood": "W",
+    "stone": "S",
+    "ore": "O",
+    "food": "F",
+}
+
+
+def build_vision_grid(npc, world) -> str:
+    """Build a 5×5 ASCII grid of what the NPC can see."""
+    radius = config.NPC_VISION_RADIUS  # default 2 → 5×5
+    lines = []
+    for dy in range(-radius, radius + 1):
+        row = []
+        for dx in range(-radius, radius + 1):
+            tx, ty = npc.x + dx, npc.y + dy
+            if not (0 <= tx < world.width and 0 <= ty < world.height):
+                row.append("X")  # out of bounds
+                continue
+            tile = world.get_tile(tx, ty)
+            if tile is None:
+                row.append("?")
+                continue
+
+            # Base char from tile type
+            ch = _TILE_CHARS.get(tile.tile_type.value, "?")
+
+            # Override if resource present
+            if tile.resource and tile.resource.quantity > 0:
+                ch = _RESOURCE_CHARS.get(tile.resource.resource_type.value, ch)
+
+            # Mark NPCs
+            if tile.npc_ids:
+                # Show first NPC initial
+                npc_here = world.get_npc(tile.npc_ids[0])
+                if npc_here:
+                    ch = npc_here.name[0].upper()
+
+            # Mark player
+            if tile.player_here:
+                ch = "P"
+
+            # Mark self at center
+            if dx == 0 and dy == 0:
+                ch = "@"
+
+            # Mark exchange
+            if tile.is_exchange and dx == 0 and dy == 0:
+                ch = "£"
+            elif tile.is_exchange:
+                ch = "E"
+
+            row.append(ch)
+        lines.append(" ".join(row))
+
+    legend = "图例: @=你 P=玩家 E=交易所 W=木 S=石 O=矿 F=食 ♣=森 ▲=岩 ⌂=城 ·=草"
+    return "\n".join(lines) + "\n" + legend
+
+
 # ── Builder functions ─────────────────────────────────────────────────────────
 
 def build_npc_system_prompt(npc, world) -> str:
@@ -178,8 +264,11 @@ def build_npc_system_prompt(npc, world) -> str:
     )
 
 
-def build_npc_context(npc, world) -> tuple[str, bool]:
-    """Return (context_str, is_social_mode)."""
+def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
+    """Return (context_str, is_social_mode).
+
+    rag_memories: pre-formatted string of retrieved memory records to inject.
+    """
     from engine.world import TileType
 
     tile = world.get_tile(npc.x, npc.y)
@@ -194,21 +283,40 @@ def build_npc_context(npc, world) -> tuple[str, bool]:
     if tile and tile.is_exchange:
         exchange_hint = "★ 你正站在交易所！可以用exchange换金币，或用buy_food购买食物。\n"
 
+    # Vision grid
+    vision_grid = build_vision_grid(npc, world)
+
     notes_str = "\n".join(f"- {n}" for n in npc.memory.personal_notes) or "（暂无）"
     inbox_str = "\n".join(f"- {m}" for m in npc.memory.inbox) or "（无新消息）"
 
     recent = world.recent_events[-8:] if world.recent_events else []
     recent_str = "\n".join(f"- {e}" for e in recent) or "（无）"
 
-    nearby = world.get_nearby_npcs(npc, config.NPC_HEARING_RADIUS)
-    has_social = bool(nearby or npc.memory.inbox)
+    rag_str = rag_memories if rag_memories else "（暂无相关记忆）"
 
-    nearby_str = "\n".join(
+    nearby = world.get_nearby_npcs_for_npc(npc, config.NPC_HEARING_RADIUS)
+
+    # Also check if player is nearby
+    player_nearby = []
+    if world.player:
+        pdist = abs(world.player.x - npc.x) + abs(world.player.y - npc.y)
+        if pdist <= config.NPC_HEARING_RADIUS:
+            player_nearby.append(
+                f"- {world.player.name}(player) 位于({world.player.x},{world.player.y}) "
+                f"背包:木{world.player.inventory.wood}/石{world.player.inventory.stone}"
+                f"/矿{world.player.inventory.ore}/食{world.player.inventory.food}"
+                f"/金{world.player.inventory.gold} 体力:{world.player.energy}"
+            )
+
+    has_social = bool(nearby or npc.memory.inbox or player_nearby)
+
+    nearby_str_parts = [
         f"- {n.name}({n.npc_id}) 位于({n.x},{n.y}) "
         f"背包:木{n.inventory.wood}/石{n.inventory.stone}/矿{n.inventory.ore}/食{n.inventory.food}/金{n.inventory.gold} "
         f"体力:{n.energy}"
         for n in nearby
-    ) or "（无）"
+    ] + player_nearby
+    nearby_str = "\n".join(nearby_str_parts) or "（无）"
 
     common = dict(
         tick=world.time.tick,
@@ -224,7 +332,9 @@ def build_npc_context(npc, world) -> tuple[str, bool]:
         tile_type=tile_type,
         resource_info=resource_info,
         exchange_hint=exchange_hint,
+        vision_grid=vision_grid,
         notes=notes_str,
+        rag_memories=rag_str,
         recent_events=recent_str,
     )
 

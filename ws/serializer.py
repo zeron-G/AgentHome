@@ -1,6 +1,7 @@
 """Convert World state to JSON-serializable dict for WebSocket broadcast."""
 from __future__ import annotations
 
+import config
 from engine.world import ResourceType, TileType, World
 from game.events import WorldEvent
 from game.token_tracker import TokenTracker
@@ -27,11 +28,13 @@ class WorldSerializer:
         world: World,
         token_tracker: TokenTracker,
         events: list[WorldEvent] | None = None,
+        simulation_running: bool = False,
     ) -> dict:
         """Full world state snapshot for clients."""
-        return {
+        snapshot: dict = {
             "type": "world_state",
             "tick": world.time.tick,
+            "simulation_running": simulation_running,
             "time": {
                 "hour": round(world.time.hour, 1),
                 "day": world.time.day,
@@ -46,7 +49,16 @@ class WorldSerializer:
             },
             "events": [e.to_dict(world) for e in (events or [])],
             "token_usage": token_tracker.snapshot(),
+            "settings": self._serialize_settings(),
         }
+
+        # Include player if present
+        if world.player:
+            snapshot["player"] = self._serialize_player(world.player)
+        else:
+            snapshot["player"] = None
+
+        return snapshot
 
     def _serialize_tiles(self, world: World) -> list[dict]:
         result = []
@@ -65,11 +77,13 @@ class WorldSerializer:
                     t["n"] = tile.npc_ids
                 if tile.is_exchange:
                     t["e"] = 1
+                if tile.player_here:
+                    t["p"] = 1
                 result.append(t)
         return result
 
     def _serialize_npc(self, npc) -> dict:
-        return {
+        d: dict = {
             "id": npc.npc_id,
             "name": npc.name,
             "x": npc.x,
@@ -87,4 +101,47 @@ class WorldSerializer:
             "last_message": npc.last_message,
             "last_message_tick": npc.last_message_tick,
             "is_processing": npc.is_processing,
+        }
+        # Conditionally include inner thought
+        if config.SHOW_NPC_THOUGHTS and getattr(npc, "last_thought", ""):
+            d["thought"] = npc.last_thought
+        return d
+
+    def _serialize_player(self, player) -> dict:
+        return {
+            "id": player.player_id,
+            "name": player.name,
+            "x": player.x,
+            "y": player.y,
+            "energy": player.energy,
+            "is_god_mode": player.is_god_mode,
+            "last_action": player.last_action,
+            "last_message": player.last_message,
+            "inventory": {
+                "wood": player.inventory.wood,
+                "stone": player.inventory.stone,
+                "ore": player.inventory.ore,
+                "food": player.inventory.food,
+                "gold": player.inventory.gold,
+            },
+            "inbox": list(player.inbox[-10:]),  # last 10 messages
+        }
+
+    def _serialize_settings(self) -> dict:
+        """Current hot-modifiable settings for client sync."""
+        return {
+            "show_npc_thoughts": config.SHOW_NPC_THOUGHTS,
+            "npc_vision_radius": config.NPC_VISION_RADIUS,
+            "world_tick_seconds": config.WORLD_TICK_SECONDS,
+            "npc_min_think": config.NPC_MIN_THINK_SECONDS,
+            "npc_max_think": config.NPC_MAX_THINK_SECONDS,
+            "god_min_think": config.GOD_MIN_THINK_SECONDS,
+            "god_max_think": config.GOD_MAX_THINK_SECONDS,
+            "npc_hearing_radius": config.NPC_HEARING_RADIUS,
+            "food_energy_restore": config.FOOD_ENERGY_RESTORE,
+            "sleep_energy_restore": config.SLEEP_ENERGY_RESTORE,
+            "exchange_rate_wood": config.EXCHANGE_RATE_WOOD,
+            "exchange_rate_stone": config.EXCHANGE_RATE_STONE,
+            "exchange_rate_ore": config.EXCHANGE_RATE_ORE,
+            "food_cost_gold": config.FOOD_COST_GOLD,
         }

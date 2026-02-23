@@ -1,4 +1,4 @@
-"""World state mutations: apply NPC/God actions, passive effects."""
+"""World state mutations: apply NPC/God/Player actions, passive effects."""
 from __future__ import annotations
 
 import random
@@ -6,7 +6,7 @@ from typing import Optional
 
 import config
 from engine.world import (
-    GodEntity, Inventory, NPC, Resource, ResourceType,
+    GodEntity, Inventory, NPC, Player, Resource, ResourceType,
     TileType, WeatherType, World,
 )
 from game.events import EventBus, EventType, WorldEvent
@@ -22,7 +22,7 @@ class WorldManager:
     def apply_passive(self, world: World):
         tick = world.time.tick
 
-        # Energy effects
+        # Energy effects for NPCs
         for npc in world.npcs:
             phase = world.time.phase
             weather = world.weather
@@ -42,6 +42,14 @@ class WorldManager:
             if npc.energy == 0 and npc.inventory.food > 0:
                 npc.inventory.food -= 1
                 npc.energy = min(100, npc.energy + config.FOOD_ENERGY_RESTORE)
+
+        # Energy drain for player too
+        if world.player:
+            phase = world.time.phase
+            drain = 1 if phase == "day" else 2
+            if world.weather == WeatherType.STORM:
+                drain += 1
+            world.player.energy = max(0, world.player.energy - drain)
 
         # Resource regrowth (slow, every 10 ticks)
         if tick % 10 == 0:
@@ -73,6 +81,11 @@ class WorldManager:
         action_type = action.get("action", "idle")
         events: list[WorldEvent] = []
         tick = world.time.tick
+
+        # Store thought if provided
+        thought = action.get("thought", "").strip()
+        if thought:
+            npc.last_thought = thought
 
         if action_type == "move":
             events.extend(self._do_move(npc, action, world, tick))
@@ -205,6 +218,10 @@ class WorldManager:
         npc.last_message_tick = tick
         npc.last_action = "talk"
 
+        # If talking to player, put message in player inbox
+        if world.player and target_id == "player":
+            world.player.inbox.append(f"{npc.name}: {full_msg}")
+
         return [WorldEvent(
             event_type=EventType.NPC_SPOKE,
             tick=tick,
@@ -222,7 +239,7 @@ class WorldManager:
             return []
 
         dist = abs(target_npc.x - npc.x) + abs(target_npc.y - npc.y)
-        if dist > 1:
+        if dist > config.NPC_ADJACENT_RADIUS:
             return []
 
         offer_item = action.get("offer_item", "")
@@ -366,6 +383,212 @@ class WorldManager:
             radius=4,
             payload={"qty": qty, "gold_spent": cost},
         )]
+
+    # ── Player actions ─────────────────────────────────────────────────────────
+
+    def apply_player_action(self, player: Player, action: dict, world: World) -> list[WorldEvent]:
+        """Apply a player action. Returns generated events."""
+        action_type = action.get("action", "idle")
+        tick = world.time.tick
+        events: list[WorldEvent] = []
+
+        if action_type == "move":
+            events.extend(self._player_move(player, action, world, tick))
+        elif action_type == "gather":
+            events.extend(self._player_gather(player, world, tick))
+        elif action_type == "talk":
+            events.extend(self._player_talk(player, action, world, tick))
+        elif action_type == "trade":
+            events.extend(self._player_trade(player, action, world, tick))
+        elif action_type == "eat":
+            events.extend(self._player_eat(player, world, tick))
+        elif action_type == "exchange":
+            events.extend(self._player_exchange(player, action, world, tick))
+        elif action_type == "buy_food":
+            events.extend(self._player_buy_food(player, action, world, tick))
+
+        player.last_action = action_type
+        return events
+
+    def _player_move(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        dx = max(-1, min(1, int(action.get("dx", 0))))
+        dy = max(-1, min(1, int(action.get("dy", 0))))
+        new_x, new_y = player.x + dx, player.y + dy
+
+        if not (0 <= new_x < world.width and 0 <= new_y < world.height):
+            return []
+        new_tile = world.get_tile(new_x, new_y)
+        if not new_tile or new_tile.tile_type == TileType.WATER:
+            return []
+
+        # Update tile player_here flags
+        old_tile = world.get_tile(player.x, player.y)
+        if old_tile:
+            old_tile.player_here = False
+
+        player.x, player.y = new_x, new_y
+        new_tile.player_here = True
+
+        energy_cost = 3 if world.weather == WeatherType.STORM else 2
+        player.energy = max(0, player.energy - energy_cost)
+
+        return [WorldEvent(
+            event_type=EventType.PLAYER_MOVED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=2,
+            payload={"name": player.name},
+        )]
+
+    def _player_gather(self, player: Player, world: World, tick: int) -> list[WorldEvent]:
+        tile = world.get_tile(player.x, player.y)
+        if not tile or not tile.resource or tile.resource.quantity <= 0:
+            return []
+        if tile.tile_type == TileType.TOWN:
+            return []
+
+        rtype = tile.resource.resource_type
+        amount = min(2, tile.resource.quantity)
+        tile.resource.quantity -= amount
+
+        if rtype == ResourceType.FOOD:
+            player.inventory.food += amount
+        else:
+            player.inventory.set(rtype.value, player.inventory.get(rtype.value) + amount)
+
+        player.energy = max(0, player.energy - 5)
+
+        return [WorldEvent(
+            event_type=EventType.PLAYER_GATHERED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=3,
+            payload={"resource": rtype.value, "amount": amount, "name": player.name},
+        )]
+
+    def _player_talk(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        message = str(action.get("message", "")).strip()
+        if not message:
+            return []
+        target_id = action.get("target_id", "")
+        player.last_message = message
+
+        # Deliver to NPC inbox if target is specific NPC
+        if target_id:
+            target = world.get_npc(target_id)
+            if target:
+                target.memory.add_to_inbox(f"[{player.name}对你说] {message}")
+
+        return [WorldEvent(
+            event_type=EventType.PLAYER_SPOKE,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=5,
+            payload={"message": message, "target_id": target_id, "name": player.name},
+        )]
+
+    def _player_trade(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        target_id = action.get("target_id", "")
+        target_npc = world.get_npc(target_id)
+        if not target_npc:
+            return []
+
+        dist = abs(target_npc.x - player.x) + abs(target_npc.y - player.y)
+        if dist > config.NPC_ADJACENT_RADIUS + 1:
+            return []
+
+        offer_item = action.get("offer_item", "")
+        offer_qty = int(action.get("offer_qty", 0) or 0)
+        request_item = action.get("request_item", "")
+        request_qty = int(action.get("request_qty", 0) or 0)
+
+        if not offer_item or not request_item or offer_qty <= 0 or request_qty <= 0:
+            return []
+
+        player_has = player.inventory.get(offer_item)
+        npc_has = target_npc.inventory.get(request_item)
+
+        if player_has < offer_qty or npc_has < request_qty:
+            return []
+
+        player.inventory.set(offer_item, player_has - offer_qty)
+        player.inventory.set(request_item, player.inventory.get(request_item) + request_qty)
+        target_npc.inventory.set(request_item, npc_has - request_qty)
+        target_npc.inventory.set(offer_item, target_npc.inventory.get(offer_item) + offer_qty)
+        target_npc.last_action = "trade"
+
+        return [WorldEvent(
+            event_type=EventType.PLAYER_TRADED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=5,
+            payload={
+                "with": target_id,
+                "offer_item": offer_item,
+                "offer_qty": offer_qty,
+                "request_item": request_item,
+                "request_qty": request_qty,
+                "name": player.name,
+            },
+        )]
+
+    def _player_eat(self, player: Player, world: World, tick: int) -> list[WorldEvent]:
+        if player.inventory.food <= 0:
+            return []
+        player.inventory.food -= 1
+        restore = config.FOOD_ENERGY_RESTORE
+        player.energy = min(100, player.energy + restore)
+        return []
+
+    def _player_exchange(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        tile = world.get_tile(player.x, player.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        item = action.get("exchange_item", "")
+        qty = int(action.get("exchange_qty", 0) or 0)
+        rates = {
+            "wood": config.EXCHANGE_RATE_WOOD,
+            "stone": config.EXCHANGE_RATE_STONE,
+            "ore": config.EXCHANGE_RATE_ORE,
+        }
+        if not item or qty <= 0 or item not in rates:
+            return []
+
+        player_has = player.inventory.get(item)
+        qty = min(qty, player_has)
+        if qty <= 0:
+            return []
+
+        gold_earned = qty * rates[item]
+        player.inventory.set(item, player_has - qty)
+        player.inventory.gold += gold_earned
+        return []
+
+    def _player_buy_food(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        tile = world.get_tile(player.x, player.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        qty = int(action.get("quantity", 1) or 1)
+        cost = qty * config.FOOD_COST_GOLD
+        if player.inventory.gold < cost:
+            qty = player.inventory.gold // config.FOOD_COST_GOLD
+            cost = qty * config.FOOD_COST_GOLD
+        if qty <= 0:
+            return []
+
+        player.inventory.gold -= cost
+        player.inventory.food += qty
+        return []
 
     # ── God actions ───────────────────────────────────────────────────────────
 

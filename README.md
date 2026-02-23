@@ -57,7 +57,9 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 4. 打开浏览器
 
-访问 **http://localhost:8000**，游戏自动开始。
+访问 
+**http://localhost:8000**
+，游戏自动开始。
 
 首次启动若未配置密钥，点击右侧 **⚙ 设置** 标签页，输入 Gemini API Key 或配置本地模型后保存即可。
 

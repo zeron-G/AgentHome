@@ -1,4 +1,4 @@
-"""Main game loop: world tick, NPC brain loops, God brain loop."""
+"""Main game loop: world tick, NPC brain loops, God brain loop, player actions."""
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +13,7 @@ from engine.world import NPC, World, create_world
 from engine.world_manager import WorldManager
 from game.events import EventBus, EventType, WorldEvent
 from game.token_tracker import TokenTracker
+from rag import JSONRAGStorage
 from ws.manager import WSManager
 from ws.serializer import WorldSerializer
 
@@ -30,35 +31,76 @@ class GameLoop:
         self.token_tracker = TokenTracker()
         self.ws_manager = WSManager()
         self.serializer = WorldSerializer()
-        self.npc_agent = NPCAgent(self.token_tracker)
+
+        # RAG storage (JSON-based, swappable)
+        self.rag = JSONRAGStorage()
+
+        self.npc_agent = NPCAgent(self.token_tracker, rag_storage=self.rag)
         self.god_agent = GodAgent(self.token_tracker)
+
         self._world_lock = asyncio.Lock()
-        self._running = False
+        self._running = False            # server-alive flag
+        self._simulation_running = False # world ticking + agent brains running
+
+        # Cancellable simulation tasks
+        self._sim_tasks: list[asyncio.Task] = []
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def start(self):
+        """Start the server listener. Simulation does NOT auto-start."""
         self._running = True
-        logger.info("Game loop starting...")
+        logger.info("GameLoop server started (simulation paused — click Start to begin).")
+        # Send initial snapshot so clients see the frozen world
+        await self._broadcast()
+        # Keep server alive
+        while self._running:
+            await asyncio.sleep(1.0)
+
+    async def stop(self):
+        self._running = False
+        await self._stop_simulation()
+
+    # ── Simulation start / stop ───────────────────────────────────────────────
+
+    async def start_simulation(self):
+        if self._simulation_running:
+            return
+        self._simulation_running = True
+        logger.info("Simulation started.")
         tasks = [
             asyncio.create_task(self._world_tick_loop()),
             asyncio.create_task(self._god_brain_loop()),
         ]
         for npc in self.world.npcs:
             tasks.append(asyncio.create_task(self._npc_brain_loop(npc)))
-        await asyncio.gather(*tasks, return_exceptions=True)
+        self._sim_tasks = tasks
 
-    async def stop(self):
-        self._running = False
+    async def _stop_simulation(self):
+        self._simulation_running = False
+        for t in self._sim_tasks:
+            t.cancel()
+        self._sim_tasks.clear()
+        logger.info("Simulation stopped.")
+
+    async def stop_simulation(self):
+        await self._stop_simulation()
+
+    # ── Control commands ──────────────────────────────────────────────────────
 
     def handle_god_command(self, cmd: dict):
         """Queue a god command from the browser UI."""
         self.world.god.pending_commands.append(cmd)
 
     def handle_control(self, cmd: dict):
-        """Handle game control commands (pause/resume/set_limit/set_api_key)."""
+        """Handle game control commands."""
         command = cmd.get("command", "")
-        if command == "pause":
+
+        if command == "start_simulation":
+            asyncio.create_task(self._start_and_broadcast())
+        elif command == "stop_simulation":
+            asyncio.create_task(self._stop_and_broadcast())
+        elif command == "pause":
             self.token_tracker._paused = True
         elif command == "resume":
             self.token_tracker.resume()
@@ -69,6 +111,102 @@ class GameLoop:
             new_key = cmd.get("value", "").strip()
             if new_key:
                 self.update_api_key(new_key)
+        elif command == "save_game":
+            asyncio.create_task(self._save_game())
+        elif command == "delete_saves":
+            self.rag.delete_all()
+            logger.info("All saves deleted.")
+        elif command == "delete_npc_memory":
+            npc_id = cmd.get("value", "").strip()
+            if npc_id:
+                self.rag.delete_npc_memory(npc_id)
+        elif command == "toggle_god_mode":
+            if self.world.player:
+                self.world.player.is_god_mode = not self.world.player.is_god_mode
+        elif command == "update_setting":
+            self._apply_setting(cmd.get("key", ""), cmd.get("value"))
+        elif command == "set_show_thoughts":
+            val = cmd.get("value", True)
+            config.SHOW_NPC_THOUGHTS = bool(val)
+        elif command == "set_player_name":
+            name = str(cmd.get("value", "")).strip()
+            if name and self.world.player:
+                self.world.player.name = name
+
+    async def _start_and_broadcast(self):
+        await self.start_simulation()
+        await self._broadcast()
+
+    async def _stop_and_broadcast(self):
+        await self._stop_simulation()
+        await self._broadcast()
+
+    def _apply_setting(self, key: str, value):
+        """Apply a hot-modifiable config setting by key name."""
+        try:
+            if key == "world_tick_seconds":
+                config.WORLD_TICK_SECONDS = max(0.5, float(value))
+            elif key == "npc_min_think":
+                config.NPC_MIN_THINK_SECONDS = max(1.0, float(value))
+            elif key == "npc_max_think":
+                config.NPC_MAX_THINK_SECONDS = max(2.0, float(value))
+            elif key == "god_min_think":
+                config.GOD_MIN_THINK_SECONDS = max(5.0, float(value))
+            elif key == "god_max_think":
+                config.GOD_MAX_THINK_SECONDS = max(10.0, float(value))
+            elif key == "npc_hearing_radius":
+                config.NPC_HEARING_RADIUS = max(1, int(value))
+            elif key == "food_energy_restore":
+                config.FOOD_ENERGY_RESTORE = max(1, int(value))
+            elif key == "sleep_energy_restore":
+                config.SLEEP_ENERGY_RESTORE = max(1, int(value))
+            elif key == "exchange_rate_wood":
+                config.EXCHANGE_RATE_WOOD = max(1, int(value))
+            elif key == "exchange_rate_stone":
+                config.EXCHANGE_RATE_STONE = max(1, int(value))
+            elif key == "exchange_rate_ore":
+                config.EXCHANGE_RATE_ORE = max(1, int(value))
+            elif key == "food_cost_gold":
+                config.FOOD_COST_GOLD = max(1, int(value))
+            elif key == "npc_vision_radius":
+                config.NPC_VISION_RADIUS = max(1, int(value))
+            elif key == "show_npc_thoughts":
+                config.SHOW_NPC_THOUGHTS = bool(value)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid setting {key}={value}: {e}")
+
+    async def handle_player_action(self, msg: dict):
+        """Process a player action message from a WebSocket client."""
+        if not self.world.player:
+            return
+
+        player = self.world.player
+
+        # God mode: route weather/resource commands as god actions
+        if player.is_god_mode and msg.get("action") in ("set_weather", "spawn_resource"):
+            cmd = dict(msg)
+            self.handle_god_command(cmd)
+            return
+
+        events: list[WorldEvent] = []
+        async with self._world_lock:
+            events = self.world_manager.apply_player_action(player, msg, self.world)
+
+        for evt in events:
+            self.event_bus.dispatch(evt, self.world)
+
+        await self._broadcast_with_events(events if events else [])
+
+    async def _save_game(self):
+        """Persist current world state snapshot to RAG storage."""
+        try:
+            state = self.serializer.world_snapshot(
+                self.world, self.token_tracker, [], self._simulation_running
+            )
+            self.rag.save_game_state(state)
+            logger.info("Game state saved.")
+        except Exception as e:
+            logger.error(f"Save error: {e}")
 
     def update_api_key(self, new_key: str):
         """Hot-reload the Gemini API key for all agents."""
@@ -100,7 +238,7 @@ class GameLoop:
 
     async def _world_tick_loop(self):
         """Advances world time and passive effects every WORLD_TICK_SECONDS."""
-        while self._running:
+        while self._simulation_running:
             async with self._world_lock:
                 self.world.time.advance()
                 self.world_manager.apply_passive(self.world)
@@ -118,7 +256,8 @@ class GameLoop:
                     self.event_bus.dispatch(evt, self.world)
                 if events:
                     await self._broadcast_with_events(events)
-                    continue  # already broadcast
+                    await asyncio.sleep(config.WORLD_TICK_SECONDS)
+                    continue
 
             await self._broadcast()
             await asyncio.sleep(config.WORLD_TICK_SECONDS)
@@ -130,7 +269,7 @@ class GameLoop:
         # Stagger start to avoid all NPCs calling LLM simultaneously
         await asyncio.sleep(random.uniform(1.0, 4.0))
 
-        while self._running:
+        while self._simulation_running:
             if self.token_tracker.paused:
                 await asyncio.sleep(2.0)
                 continue
@@ -152,9 +291,8 @@ class GameLoop:
             except Exception as e:
                 logger.error(f"[{npc.name}] brain loop error: {e}")
 
-            # Wait before next decision (varies by action type and personality)
+            # Wait before next decision
             base = random.uniform(config.NPC_MIN_THINK_SECONDS, config.NPC_MAX_THINK_SECONDS)
-            # If NPC just spoke, give others time to respond before thinking again
             if npc.last_action == "talk":
                 base = random.uniform(3.0, 6.0)
             await asyncio.sleep(base)
@@ -163,9 +301,9 @@ class GameLoop:
 
     async def _god_brain_loop(self):
         """God acts on its own schedule, observing the world."""
-        await asyncio.sleep(random.uniform(5.0, 10.0))  # delayed first action
+        await asyncio.sleep(random.uniform(5.0, 10.0))
 
-        while self._running:
+        while self._simulation_running:
             if self.token_tracker.paused:
                 await asyncio.sleep(2.0)
                 continue
@@ -191,9 +329,13 @@ class GameLoop:
     # ── Broadcast helpers ─────────────────────────────────────────────────────
 
     async def _broadcast(self):
-        snapshot = self.serializer.world_snapshot(self.world, self.token_tracker, [])
+        snapshot = self.serializer.world_snapshot(
+            self.world, self.token_tracker, [], self._simulation_running
+        )
         await self.ws_manager.broadcast(snapshot)
 
     async def _broadcast_with_events(self, events: list[WorldEvent]):
-        snapshot = self.serializer.world_snapshot(self.world, self.token_tracker, events)
+        snapshot = self.serializer.world_snapshot(
+            self.world, self.token_tracker, events, self._simulation_running
+        )
         await self.ws_manager.broadcast(snapshot)

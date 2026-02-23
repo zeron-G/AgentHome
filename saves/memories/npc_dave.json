@@ -1,0 +1,178 @@
+[
+  {
+    "record_id": "ce71d1b5",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 得赶紧去采集些石头和矿石，交易所还等着我呢。先往东边去看看。",
+    "tags": [
+      "move",
+      "dawn",
+      "sunny"
+    ],
+    "timestamp": 1771838381.563352,
+    "tick": 3,
+    "location": [
+      14,
+      14
+    ]
+  },
+  {
+    "record_id": "8d70fdd6",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 看到岩石了，得赶紧过去采集石头和矿石。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838391.9695418,
+    "tick": 6,
+    "location": [
+      15,
+      14
+    ]
+  },
+  {
+    "record_id": "6fb7cb41",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 终于到岩石地块了，开始采集石头和矿石！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838402.781403,
+    "tick": 10,
+    "location": [
+      16,
+      15
+    ]
+  },
+  {
+    "record_id": "2f91bde5",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 这个地块没有资源了，去旁边的矿石地块采集更多有价值的矿石。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838412.5798745,
+    "tick": 13,
+    "location": [
+      16,
+      15
+    ]
+  },
+  {
+    "record_id": "4c015902",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 太好了，这里有丰富的矿石！赶紧动手采集。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838420.8556628,
+    "tick": 16,
+    "location": [
+      17,
+      16
+    ]
+  },
+  {
+    "record_id": "3714272f",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 继续采集矿石，这些都是金币啊！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838430.764503,
+    "tick": 19,
+    "location": [
+      17,
+      16
+    ]
+  },
+  {
+    "record_id": "19de30ab",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 还有一些矿石，不能浪费，继续采集！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771838438.1389408,
+    "tick": 22,
+    "location": [
+      17,
+      16
+    ]
+  },
+  {
+    "record_id": "f17be63d",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 这个地块的矿石采完了，去旁边的岩石地块看看有没有新的矿石或石头。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771838450.0422742,
+    "tick": 25,
+    "location": [
+      17,
+      16
+    ]
+  },
+  {
+    "record_id": "fd63a641",
+    "npc_id": "npc_dave",
+    "content": "行动: sleep | 想: 天色已晚，体力也所剩无几。我得好好睡一觉，明天才有力气把这些矿石运到交易所换金币。",
+    "tags": [
+      "sleep",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771838477.01526,
+    "tick": 34,
+    "location": [
+      19,
+      17
+    ]
+  },
+  {
+    "record_id": "71a09032",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 睡醒了，得赶紧把这些矿石运到交易所换成金币。交易所方向是西北。",
+    "tags": [
+      "move",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838487.5984023,
+    "tick": 38,
+    "location": [
+      19,
+      17
+    ]
+  },
+  {
+    "record_id": "ca2c98ec",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 我得继续往交易所走，这些矿石等着换成金币呢。",
+    "tags": [
+      "move",
+      "night",
+      "rainy"
+    ],
+    "timestamp": 1771838499.1484804,
+    "tick": 42,
+    "location": [
+      18,
+      16
+    ]
+  }
+]

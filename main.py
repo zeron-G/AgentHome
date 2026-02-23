@@ -44,6 +44,25 @@ async def get_settings():
         "llm_provider": config.LLM_PROVIDER,
         "local_llm_base_url": config.LOCAL_LLM_BASE_URL,
         "local_llm_model": config.LOCAL_LLM_MODEL,
+        # Hot-modifiable settings
+        "show_npc_thoughts": config.SHOW_NPC_THOUGHTS,
+        "npc_vision_radius": config.NPC_VISION_RADIUS,
+        "world_tick_seconds": config.WORLD_TICK_SECONDS,
+        "npc_min_think": config.NPC_MIN_THINK_SECONDS,
+        "npc_max_think": config.NPC_MAX_THINK_SECONDS,
+        "god_min_think": config.GOD_MIN_THINK_SECONDS,
+        "god_max_think": config.GOD_MAX_THINK_SECONDS,
+        "npc_hearing_radius": config.NPC_HEARING_RADIUS,
+        "food_energy_restore": config.FOOD_ENERGY_RESTORE,
+        "sleep_energy_restore": config.SLEEP_ENERGY_RESTORE,
+        "exchange_rate_wood": config.EXCHANGE_RATE_WOOD,
+        "exchange_rate_stone": config.EXCHANGE_RATE_STONE,
+        "exchange_rate_ore": config.EXCHANGE_RATE_ORE,
+        "food_cost_gold": config.FOOD_COST_GOLD,
+        "player_name": (
+            game_loop.world.player.name if game_loop.world.player else config.PLAYER_NAME
+        ),
+        "simulation_running": game_loop._simulation_running,
     })
 
 
@@ -77,6 +96,50 @@ async def post_settings(request: Request):
             local_model = str(data.get("local_llm_model", "") or "").strip() or None
             game_loop.update_provider(provider, local_url, local_model)
 
+    # Hot-modifiable settings routed through _apply_setting
+    hot_keys = [
+        "world_tick_seconds", "npc_min_think", "npc_max_think",
+        "god_min_think", "god_max_think", "npc_hearing_radius",
+        "food_energy_restore", "sleep_energy_restore",
+        "exchange_rate_wood", "exchange_rate_stone", "exchange_rate_ore",
+        "food_cost_gold", "npc_vision_radius", "show_npc_thoughts",
+    ]
+    for key in hot_keys:
+        if key in data:
+            game_loop._apply_setting(key, data[key])
+
+    # Player name
+    if "player_name" in data and game_loop.world.player:
+        name = str(data["player_name"]).strip()
+        if name:
+            game_loop.world.player.name = name
+
+    return JSONResponse({"ok": True})
+
+
+# ── Saves API ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/saves")
+async def get_saves():
+    return JSONResponse(game_loop.rag.list_save_info())
+
+
+@app.post("/api/saves/delete")
+async def delete_all_saves():
+    game_loop.rag.delete_all()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/saves/delete_memory")
+async def delete_npc_memory(request: Request):
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+    npc_id = str(data.get("npc_id", "")).strip()
+    if not npc_id:
+        return JSONResponse({"ok": False, "error": "npc_id required"}, status_code=400)
+    game_loop.rag.delete_npc_memory(npc_id)
     return JSONResponse({"ok": True})
 
 
@@ -89,7 +152,10 @@ async def websocket_endpoint(ws: WebSocket):
     # Send immediate world snapshot on connect
     try:
         snapshot = game_loop.serializer.world_snapshot(
-            game_loop.world, game_loop.token_tracker, []
+            game_loop.world,
+            game_loop.token_tracker,
+            [],
+            game_loop._simulation_running,
         )
         await game_loop.ws_manager.send_to(ws, snapshot)
     except Exception:
@@ -108,12 +174,14 @@ async def websocket_endpoint(ws: WebSocket):
             if msg_type == "god_command":
                 game_loop.handle_god_command(msg)
 
+            elif msg_type == "god_direct":
+                game_loop.handle_god_command(msg)
+
             elif msg_type == "control":
                 game_loop.handle_control(msg)
 
-            elif msg_type == "god_direct":
-                # Direct god action (bypass LLM, immediate)
-                game_loop.handle_god_command(msg)
+            elif msg_type == "player_action":
+                await game_loop.handle_player_action(msg)
 
     except WebSocketDisconnect:
         pass
@@ -127,7 +195,7 @@ async def websocket_endpoint(ws: WebSocket):
 
 @app.on_event("startup")
 async def startup():
-    logger.info("Starting AgentHome game loop...")
+    logger.info("Starting AgentHome server (simulation paused at startup).")
     asyncio.create_task(game_loop.start())
 
 

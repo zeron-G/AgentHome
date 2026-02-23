@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentHome - AI 沙盒世界</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d;
+      --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+      --green: #3fb950; --yellow: #d29922; --red: #f85149;
+      --purple: #bc8cff;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Header */
+    #header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    #header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    .header-info { color: var(--muted); font-size: 12px; }
+    .header-info span { color: var(--text); font-weight: 600; }
+    #token-bar-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    #token-bar { width: 120px; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    #token-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s, background 0.3s; }
+    #token-text { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    #pause-btn { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: 12px; }
+    #pause-btn:hover { background: var(--border); }
+    #pause-btn.paused { border-color: var(--red); color: var(--red); }
+
+    /* Main area */
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Canvas area */
+    #canvas-wrap { position: relative; flex-shrink: 0; padding: 12px; display: flex; align-items: flex-start; justify-content: center; }
+    canvas { border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; image-rendering: pixelated; display: block; }
+    #weather-overlay { position: absolute; top: 12px; left: 12px; pointer-events: none; border-radius: 4px; }
+
+    /* Side panel */
+    #side { width: 300px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+
+    /* God panel */
+    #god-panel { padding: 10px; border-bottom: 1px solid var(--border); }
+    #god-panel h3 { color: var(--purple); font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .btn-group { display: flex; gap: 4px; margin-bottom: 6px; }
+    .btn { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font-size: 12px; transition: all 0.15s; }
+    .btn:hover { background: var(--border); }
+    .btn.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,0.1); }
+    .god-hint { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    #god-speech { font-size: 11px; color: var(--purple); font-style: italic; padding: 6px; background: rgba(188,140,255,0.05); border-radius: 4px; border-left: 2px solid var(--purple); margin-top: 4px; min-height: 32px; }
+
+    /* NPC list */
+    #npc-list { padding: 10px; border-bottom: 1px solid var(--border); }
+    #npc-list h3 { color: var(--accent); font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .npc-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; cursor: pointer; margin-bottom: 2px; border: 1px solid transparent; }
+    .npc-row:hover { background: rgba(255,255,255,0.04); }
+    .npc-row.selected { border-color: var(--border); background: rgba(255,255,255,0.06); }
+    .npc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .npc-name { font-weight: 600; width: 44px; flex-shrink: 0; }
+    .npc-pos { color: var(--muted); width: 48px; flex-shrink: 0; font-size: 11px; }
+    .npc-inv { color: var(--muted); font-size: 11px; flex: 1; }
+    .npc-energy-bar { width: 36px; height: 4px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+    .npc-energy-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .npc-status { font-size: 10px; color: var(--muted); width: 36px; text-align: right; flex-shrink: 0; }
+
+    /* NPC detail */
+    #npc-detail { padding: 10px; border-bottom: 1px solid var(--border); }
+    #npc-detail h3 { font-size: 12px; color: var(--accent); margin-bottom: 6px; }
+    #npc-detail-content { font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+    /* Chat log */
+    #chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #chat-wrap h3 { padding: 8px 10px; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+    #chat-clear { font-size: 11px; color: var(--muted); cursor: pointer; text-transform: none; letter-spacing: 0; }
+    #chat-clear:hover { color: var(--text); }
+    #chat-log { flex: 1; overflow-y: auto; padding: 8px 10px; }
+    .chat-entry { margin-bottom: 5px; line-height: 1.5; }
+    .chat-time { color: var(--muted); font-size: 10px; }
+    .chat-actor { font-weight: 600; }
+    .chat-msg { color: var(--text); }
+    .chat-event { color: var(--muted); font-style: italic; }
+    .chat-god { color: var(--purple); }
+    #chat-log::-webkit-scrollbar { width: 4px; }
+    #chat-log::-webkit-scrollbar-track { background: transparent; }
+    #chat-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Status bar */
+    #status-bar { padding: 4px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    #status-bar.error { color: var(--red); }
+
+    /* Tooltip */
+    #tooltip { position: fixed; background: rgba(13,17,23,0.95); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 11px; pointer-events: none; z-index: 100; display: none; }
+
+    /* Paused overlay */
+    #paused-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+    #paused-overlay.show { display: flex; }
+    #paused-overlay h2 { color: var(--red); }
+    #paused-overlay p { color: var(--muted); font-size: 12px; }
+    #resume-btn { padding: 8px 24px; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    #new-limit-input { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 4px; width: 120px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <h1>AgentHome</h1>
+  <div class="header-info">Tick: <span id="hdr-tick">0</span></div>
+  <div class="header-info"><span id="hdr-time">Day 1 06:00</span> <span id="hdr-phase">dawn</span></div>
+  <div class="header-info">天气: <span id="hdr-weather">☀ sunny</span></div>
+  <div id="token-bar-wrap">
+    <div id="token-bar"><div id="token-fill" style="width:0%"></div></div>
+    <div id="token-text">0 / 200k tokens</div>
+    <button id="pause-btn">暂停</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <!-- Canvas -->
+  <div id="canvas-wrap">
+    <canvas id="world-canvas" width="600" height="600"></canvas>
+    <canvas id="weather-overlay" width="600" height="600" style="position:absolute;top:12px;left:12px;pointer-events:none;border-radius:4px;"></canvas>
+  </div>
+
+  <!-- Side Panel -->
+  <div id="side">
+    <!-- God Panel -->
+    <div id="god-panel">
+      <h3>⚡ 上帝控制台</h3>
+      <div class="god-hint">天气控制:</div>
+      <div class="btn-group">
+        <button class="btn" onclick="setWeather('sunny')">☀ 晴天</button>
+        <button class="btn" onclick="setWeather('rainy')">🌧 雨天</button>
+        <button class="btn" onclick="setWeather('storm')">⛈ 暴风</button>
+      </div>
+      <div class="god-hint">资源刷新 <span id="spawn-hint">(先选地块)</span>:</div>
+      <div class="btn-group">
+        <button class="btn" id="spawn-wood-btn" onclick="prepareSpawn('wood')">🌲 树木</button>
+        <button class="btn" id="spawn-stone-btn" onclick="prepareSpawn('stone')">🪨 石头</button>
+        <button class="btn" id="spawn-ore-btn" onclick="prepareSpawn('ore')">💎 矿石</button>
+      </div>
+      <div id="god-speech">世界在我的注视下缓缓运转...</div>
+    </div>
+
+    <!-- NPC List -->
+    <div id="npc-list">
+      <h3>🧑 NPC 状态</h3>
+      <div id="npc-rows"></div>
+    </div>
+
+    <!-- NPC Detail -->
+    <div id="npc-detail">
+      <h3>📋 详情</h3>
+      <div id="npc-detail-content">点击 NPC 查看详情</div>
+    </div>
+
+    <!-- Chat log -->
+    <div id="chat-wrap">
+      <h3>💬 世界日志 <span id="chat-clear" onclick="clearChat()">清空</span></h3>
+      <div id="chat-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div id="status-bar" id="status-bar">正在连接...</div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<!-- Paused overlay -->
+<div id="paused-overlay">
+  <h2>⚠ Token 用量已达上限</h2>
+  <p>游戏已自动暂停以防止过度消耗 API token</p>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <input id="new-limit-input" type="number" placeholder="新上限 (如 500000)" step="50000">
+    <button id="resume-btn" onclick="resumeGame()">恢复游戏</button>
+  </div>
+  <p id="token-detail" style="color:#8b949e;font-size:11px;"></p>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════
+const state = {
+  world: null,       // latest world snapshot
+  selectedNpc: null, // selected NPC id
+  spawnMode: null,   // 'wood' | 'stone' | 'ore' | null
+  selectedTile: null, // {x, y} for spawn
+  tick: 0,
+  ws: null,
+  connected: false,
+  rain_particles: [],
+};
+
+// NPC color map (from server)
+const npcColors = {};
+
+// Weather icons
+const weatherIcons = { sunny: '☀', rainy: '🌧', storm: '⛈' };
+
+// ═══════════════════════════════════════════════════════
+// WebSocket
+// ═══════════════════════════════════════════════════════
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws`;
+  setStatus('正在连接 ' + url + '...');
+
+  state.ws = new WebSocket(url);
+
+  state.ws.onopen = () => {
+    state.connected = true;
+    setStatus('已连接 ✓');
+  };
+
+  state.ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'world_state') handleWorldState(msg);
+    } catch(e) { console.error('parse error', e); }
+  };
+
+  state.ws.onclose = () => {
+    state.connected = false;
+    setStatus('连接断开，3秒后重连...', true);
+    setTimeout(connectWS, 3000);
+  };
+
+  state.ws.onerror = (e) => {
+    setStatus('连接错误', true);
+  };
+}
+
+function sendMsg(obj) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify(obj));
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// World state handler
+// ═══════════════════════════════════════════════════════
+function handleWorldState(msg) {
+  state.world = msg;
+  state.tick = msg.tick;
+
+  // Update NPC color cache
+  if (msg.npcs) {
+    for (const npc of msg.npcs) npcColors[npc.id] = npc.color;
+  }
+
+  updateHeader(msg);
+  updateNpcList(msg.npcs);
+  updateNpcDetail(msg.npcs);
+  updateGodSpeech(msg.god);
+  updateTokenUI(msg.token_usage);
+  renderWorld(msg);
+
+  // Process events for chat log
+  if (msg.events && msg.events.length > 0) {
+    for (const ev of msg.events) appendChatEvent(ev, msg.time);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// Header
+// ═══════════════════════════════════════════════════════
+function updateHeader(msg) {
+  document.getElementById('hdr-tick').textContent = msg.tick;
+  document.getElementById('hdr-time').textContent = msg.time.time_str;
+  document.getElementById('hdr-phase').textContent = `(${msg.time.phase})`;
+  const wi = weatherIcons[msg.weather] || '';
+  document.getElementById('hdr-weather').textContent = `${wi} ${msg.weather}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// Token UI
+// ═══════════════════════════════════════════════════════
+function updateTokenUI(usage) {
+  if (!usage) return;
+  const pct = Math.min(100, (usage.total_tokens_used / Math.max(1, usage.limit)) * 100);
+  const fill = document.getElementById('token-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 90 ? '#f85149' : pct > 70 ? '#d29922' : '#3fb950';
+
+  const k = n => n >= 1000 ? (n/1000).toFixed(1) + 'k' : n;
+  document.getElementById('token-text').textContent = `${k(usage.total_tokens_used)} / ${k(usage.limit)}`;
+
+  const pauseBtn = document.getElementById('pause-btn');
+  if (usage.paused) {
+    pauseBtn.textContent = '已暂停';
+    pauseBtn.classList.add('paused');
+    const overlay = document.getElementById('paused-overlay');
+    overlay.classList.add('show');
+    document.getElementById('token-detail').textContent =
+      `已使用 ${usage.total_tokens_used} / ${usage.limit} tokens (${usage.usage_pct}%)`;
+  } else {
+    pauseBtn.textContent = '暂停';
+    pauseBtn.classList.remove('paused');
+    document.getElementById('paused-overlay').classList.remove('show');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// NPC List
+// ═══════════════════════════════════════════════════════
+function updateNpcList(npcs) {
+  if (!npcs) return;
+  const container = document.getElementById('npc-rows');
+  container.innerHTML = '';
+  for (const npc of npcs) {
+    const row = document.createElement('div');
+    row.className = 'npc-row' + (state.selectedNpc === npc.id ? ' selected' : '');
+    row.onclick = () => { state.selectedNpc = npc.id; updateNpcList(state.world?.npcs); updateNpcDetail(state.world?.npcs); };
+
+    const energyColor = npc.energy > 60 ? '#3fb950' : npc.energy > 30 ? '#d29922' : '#f85149';
+    const statusMap = { talk:'说', move:'走', gather:'采', trade:'交', rest:'息', think:'想', idle:'待' };
+    const statusLabel = statusMap[npc.last_action] || '?';
+
+    const inv = npc.inventory;
+    const invStr = `🌲${inv.wood} 🪨${inv.stone} 💎${inv.ore}`;
+
+    row.innerHTML = `
+      <div class="npc-dot" style="background:${npc.color}"></div>
+      <div class="npc-name" style="color:${npc.color}">${npc.name}</div>
+      <div class="npc-pos">[${npc.x},${npc.y}]</div>
+      <div class="npc-inv">${invStr}</div>
+      <div style="width:36px;flex-shrink:0">
+        <div style="height:4px;background:var(--border);border-radius:2px;">
+          <div style="height:4px;background:${energyColor};border-radius:2px;width:${npc.energy}%"></div>
+        </div>
+      </div>
+      <div class="npc-status">${statusLabel}${npc.is_processing ? '⏳' : ''}</div>
+    `;
+    container.appendChild(row);
+  }
+}
+
+function updateNpcDetail(npcs) {
+  if (!state.selectedNpc || !npcs) return;
+  const npc = npcs.find(n => n.id === state.selectedNpc);
+  if (!npc) return;
+  const el = document.getElementById('npc-detail-content');
+  const inv = npc.inventory;
+  el.innerHTML = `
+    <div style="color:${npc.color};font-weight:600;margin-bottom:4px">${npc.name}</div>
+    <div>位置: (${npc.x}, ${npc.y}) &nbsp; 体力: <span style="color:${npc.energy>60?'#3fb950':npc.energy>30?'#d29922':'#f85149'}">${npc.energy}/100</span></div>
+    <div>背包: 🌲木头×${inv.wood} &nbsp; 🪨石头×${inv.stone} &nbsp; 💎矿石×${inv.ore}</div>
+    <div>上次动作: <span style="color:var(--accent)">${npc.last_action}</span> ${npc.is_processing ? '<span style="color:var(--yellow)">思考中...</span>' : ''}</div>
+    ${npc.last_message ? `<div style="margin-top:4px;color:var(--text);font-style:italic">"${npc.last_message}"</div>` : ''}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// God speech
+// ═══════════════════════════════════════════════════════
+function updateGodSpeech(god) {
+  if (!god) return;
+  const el = document.getElementById('god-speech');
+  el.textContent = god.commentary || '...';
+}
+
+// ═══════════════════════════════════════════════════════
+// Chat log
+// ═══════════════════════════════════════════════════════
+function appendChatEvent(ev, time) {
+  const log = document.getElementById('chat-log');
+  const div = document.createElement('div');
+  div.className = 'chat-entry';
+
+  const timeStr = time ? time.time_str : '';
+
+  if (ev.type === 'npc_spoke') {
+    const color = npcColors[ev.actor_id] || '#fff';
+    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-actor" style="color:${color}">${ev.actor || ev.actor_id}</span>: <span class="chat-msg">${escapeHtml(ev.message || ev.summary)}</span>`;
+  } else if (ev.type === 'god_commentary' || ev.type === 'weather_changed' || ev.type === 'resource_spawned') {
+    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-god">⚡ ${escapeHtml(ev.summary)}</span>`;
+  } else {
+    div.innerHTML = `<span class="chat-time">[${timeStr}]</span> <span class="chat-event">${escapeHtml(ev.summary)}</span>`;
+  }
+
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+
+  // Keep only last 200 entries
+  while (log.children.length > 200) log.removeChild(log.firstChild);
+}
+
+function clearChat() { document.getElementById('chat-log').innerHTML = ''; }
+function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ═══════════════════════════════════════════════════════
+// Canvas Rendering
+// ═══════════════════════════════════════════════════════
+const TILE = 30;  // px per tile
+const CANVAS_W = 600;
+const CANVAS_H = 600;
+
+const canvas = document.getElementById('world-canvas');
+const ctx = canvas.getContext('2d');
+const weatherCanvas = document.getElementById('weather-overlay');
+const wctx = weatherCanvas.getContext('2d');
+
+// Tile colors
+const TILE_COLORS = { g: '#5a8f3c', w: '#2a5fa5', r: '#6e6e6e', f: '#2d5a1b' };
+const TILE_BORDER = { g: '#4a7a30', w: '#1e4d8c', r: '#5a5a5a', f: '#234a16' };
+
+// Build tile lookup from array
+let tileMap = {};
+let npcBubbles = {}; // npcId -> {msg, expires}
+
+function buildTileMap(tiles) {
+  tileMap = {};
+  for (const t of tiles) tileMap[`${t.x},${t.y}`] = t;
+}
+
+function renderWorld(msg) {
+  if (!msg) return;
+
+  if (msg.tiles) buildTileMap(msg.tiles);
+
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // 1. Draw tiles
+  for (const t of msg.tiles || []) {
+    const px = t.x * TILE, py = t.y * TILE;
+    ctx.fillStyle = TILE_COLORS[t.t] || '#333';
+    ctx.fillRect(px, py, TILE, TILE);
+    ctx.strokeStyle = TILE_BORDER[t.t] || '#222';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+  }
+
+  // Highlight selected tile
+  if (state.selectedTile && state.spawnMode) {
+    const { x, y } = state.selectedTile;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x * TILE + 1, y * TILE + 1, TILE - 2, TILE - 2);
+  }
+
+  // 2. Draw resources
+  for (const t of msg.tiles || []) {
+    if (!t.r) continue;
+    const px = t.x * TILE, py = t.y * TILE;
+    const ratio = t.q / Math.max(1, t.mq);
+    ctx.globalAlpha = 0.4 + ratio * 0.6;
+    if (t.r === 'w') {  // wood
+      ctx.fillStyle = '#8B4513';
+      ctx.beginPath();
+      ctx.arc(px + TILE/2, py + TILE/2, 5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#228B22';
+      ctx.beginPath();
+      ctx.arc(px + TILE/2, py + TILE/2 - 6, 6, 0, Math.PI*2);
+      ctx.fill();
+    } else if (t.r === 's') {  // stone
+      ctx.fillStyle = '#A9A9A9';
+      ctx.fillRect(px + TILE/2 - 5, py + TILE/2 - 4, 10, 8);
+    } else if (t.r === 'o') {  // ore
+      ctx.fillStyle = '#FFD700';
+      const cx = px + TILE/2, cy = py + TILE/2, s = 5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s);
+      ctx.lineTo(cx + s*0.6, cy);
+      ctx.lineTo(cx, cy + s);
+      ctx.lineTo(cx - s*0.6, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Update speech bubble lifetimes
+  if (msg.npcs) {
+    for (const npc of msg.npcs) {
+      if (npc.last_message && npc.last_message_tick >= state.tick - 2) {
+        npcBubbles[npc.id] = { msg: npc.last_message, npc };
+      }
+    }
+  }
+
+  // 3. Draw NPCs
+  for (const npc of msg.npcs || []) {
+    const cx = npc.x * TILE + TILE/2;
+    const cy = npc.y * TILE + TILE/2;
+    const r = 9;
+
+    // Glow if selected
+    if (state.selectedNpc === npc.id) {
+      ctx.shadowColor = npc.color;
+      ctx.shadowBlur = 12;
+    }
+
+    // Body
+    ctx.fillStyle = npc.color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fill();
+
+    // Processing spinner ring
+    if (npc.is_processing) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      const now = Date.now() / 300;
+      ctx.arc(cx, cy, r + 3, now, now + Math.PI * 1.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.shadowBlur = 0;
+
+    // Name label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(npc.name, cx, cy + r + 1);
+  }
+
+  // 4. Draw speech bubbles
+  for (const [id, bubble] of Object.entries(npcBubbles)) {
+    const npc = (msg.npcs || []).find(n => n.id === id);
+    if (!npc) continue;
+    if (npc.last_message_tick < state.tick - 3) {
+      delete npcBubbles[id];
+      continue;
+    }
+
+    const cx = npc.x * TILE + TILE/2;
+    const cy = npc.y * TILE - 2;
+    const text = bubble.msg.length > 20 ? bubble.msg.slice(0, 20) + '…' : bubble.msg;
+
+    ctx.font = '9px sans-serif';
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 10, bh = 16;
+    const bx = cx - bw/2, by = cy - bh - 4;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    roundRect(ctx, bx, by, bw, bh, 3);
+    ctx.fill();
+
+    ctx.strokeStyle = npc.color;
+    ctx.lineWidth = 1;
+    roundRect(ctx, bx, by, bw, bh, 3);
+    ctx.stroke();
+
+    ctx.fillStyle = '#eee';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, cx, by + bh/2);
+  }
+
+  // Render weather effect
+  renderWeather(msg.weather);
+
+  // Kick animation frame for spinning NPCs
+  if ((msg.npcs || []).some(n => n.is_processing)) {
+    requestAnimationFrame(() => renderWorld(state.world));
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ═══════════════════════════════════════════════════════
+// Weather effects
+// ═══════════════════════════════════════════════════════
+let weatherAnimFrame = null;
+let lightningFlash = 0;
+
+function renderWeather(weather) {
+  wctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  if (weather === 'rainy') {
+    // Blue tint
+    wctx.fillStyle = 'rgba(50, 100, 180, 0.08)';
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // Animated rain
+    animateRain();
+  } else if (weather === 'storm') {
+    // Dark tint
+    wctx.fillStyle = 'rgba(0, 0, 30, 0.2)';
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    animateRain(true);
+    if (lightningFlash > 0) {
+      wctx.fillStyle = `rgba(255,255,200,${lightningFlash * 0.4})`;
+      wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      lightningFlash = Math.max(0, lightningFlash - 0.05);
+    }
+  } else {
+    if (weatherAnimFrame) { cancelAnimationFrame(weatherAnimFrame); weatherAnimFrame = null; }
+    // Sunny: subtle warm tint
+    wctx.fillStyle = 'rgba(255, 220, 100, 0.03)';
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+}
+
+function animateRain(heavy = false) {
+  if (state.rain_particles.length === 0) {
+    const count = heavy ? 120 : 60;
+    for (let i = 0; i < count; i++) {
+      state.rain_particles.push({
+        x: Math.random() * CANVAS_W,
+        y: Math.random() * CANVAS_H,
+        speed: 3 + Math.random() * 3,
+        len: heavy ? 14 : 10,
+      });
+    }
+  }
+
+  wctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  if (heavy) {
+    wctx.fillStyle = 'rgba(0,0,30,0.18)';
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  } else {
+    wctx.fillStyle = 'rgba(50,100,180,0.07)';
+    wctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  }
+
+  wctx.strokeStyle = heavy ? 'rgba(180,200,255,0.5)' : 'rgba(150,180,255,0.35)';
+  wctx.lineWidth = heavy ? 1.5 : 1;
+
+  for (const p of state.rain_particles) {
+    wctx.beginPath();
+    wctx.moveTo(p.x, p.y);
+    wctx.lineTo(p.x - 2, p.y + p.len);
+    wctx.stroke();
+    p.y += p.speed;
+    p.x -= 1;
+    if (p.y > CANVAS_H) { p.y = -10; p.x = Math.random() * CANVAS_W; }
+    if (p.x < 0) p.x = CANVAS_W;
+  }
+
+  if (heavy && Math.random() < 0.005) lightningFlash = 1;
+
+  weatherAnimFrame = requestAnimationFrame(() => {
+    const w = state.world?.weather;
+    if (w === 'rainy' || w === 'storm') animateRain(w === 'storm');
+    else { state.rain_particles = []; wctx.clearRect(0,0,CANVAS_W,CANVAS_H); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// Canvas interaction
+// ═══════════════════════════════════════════════════════
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  const cx = Math.floor((e.clientX - rect.left) * scaleX / TILE);
+  const cy = Math.floor((e.clientY - rect.top) * scaleY / TILE);
+
+  if (state.spawnMode && state.selectedTile && state.selectedTile.x === cx && state.selectedTile.y === cy) {
+    // Second click on same tile: execute spawn
+    executeSpawn(cx, cy);
+    return;
+  }
+
+  state.selectedTile = { x: cx, y: cy };
+
+  // Check if NPC is on this tile
+  if (state.world?.npcs) {
+    const npc = state.world.npcs.find(n => n.x === cx && n.y === cy);
+    if (npc) {
+      state.selectedNpc = npc.id;
+      updateNpcList(state.world.npcs);
+      updateNpcDetail(state.world.npcs);
+    }
+  }
+
+  if (state.spawnMode) {
+    document.getElementById('spawn-hint').textContent = `(已选[${cx},${cy}] 再次点击执行)`;
+  }
+
+  if (state.world) renderWorld(state.world);
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  const cx = Math.floor((e.clientX - rect.left) * scaleX / TILE);
+  const cy = Math.floor((e.clientY - rect.top) * scaleY / TILE);
+
+  const tooltip = document.getElementById('tooltip');
+  const tile = tileMap[`${cx},${cy}`];
+
+  if (tile) {
+    const typeNames = { g:'草地', w:'水域', r:'岩石', f:'森林' };
+    const resNames = { w:'木头', s:'石头', o:'矿石' };
+    let info = `[${cx},${cy}] ${typeNames[tile.t] || tile.t}`;
+    if (tile.r) info += ` | ${resNames[tile.r] || tile.r} ${tile.q}/${tile.mq}`;
+    if (tile.n && tile.n.length) info += ` | NPC: ${tile.n.join(',')}`;
+    tooltip.textContent = info;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top = (e.clientY + 12) + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  document.getElementById('tooltip').style.display = 'none';
+});
+
+// ═══════════════════════════════════════════════════════
+// God controls
+// ═══════════════════════════════════════════════════════
+function setWeather(weather) {
+  sendMsg({ type: 'god_command', command: 'set_weather', value: weather });
+  setStatus(`上帝指令: 天气 → ${weather}`);
+}
+
+function prepareSpawn(type) {
+  state.spawnMode = type;
+  state.selectedTile = null;
+  document.getElementById('spawn-hint').textContent = '(点击地图选择位置)';
+  // Update button states
+  ['wood','stone','ore'].forEach(t => {
+    document.getElementById(`spawn-${t}-btn`).classList.toggle('active', t === type);
+  });
+}
+
+function executeSpawn(x, y) {
+  if (!state.spawnMode) return;
+  sendMsg({ type: 'god_command', command: 'spawn_resource', resource_type: state.spawnMode, x, y, quantity: 8 });
+  setStatus(`上帝指令: 在[${x},${y}]刷新 ${state.spawnMode}`);
+  state.spawnMode = null;
+  state.selectedTile = null;
+  document.getElementById('spawn-hint').textContent = '(先选地块)';
+  ['wood','stone','ore'].forEach(t => document.getElementById(`spawn-${t}-btn`).classList.remove('active'));
+}
+
+// ═══════════════════════════════════════════════════════
+// Game control
+// ═══════════════════════════════════════════════════════
+document.getElementById('pause-btn').onclick = () => {
+  const paused = document.getElementById('pause-btn').classList.contains('paused');
+  if (paused) resumeGame();
+  else sendMsg({ type: 'control', command: 'pause' });
+};
+
+function resumeGame() {
+  const newLimit = parseInt(document.getElementById('new-limit-input').value) || 0;
+  if (newLimit > 0) {
+    sendMsg({ type: 'control', command: 'set_limit', value: newLimit });
+  }
+  sendMsg({ type: 'control', command: 'resume' });
+  document.getElementById('paused-overlay').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════
+// Status bar
+// ═══════════════════════════════════════════════════════
+function setStatus(msg, isError = false) {
+  const bar = document.getElementById('status-bar');
+  bar.textContent = msg;
+  bar.className = isError ? 'error' : '';
+}
+
+// ═══════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════
+connectWS();
+
+// Periodic re-render for animations even without new WS data
+setInterval(() => {
+  if (state.world && (state.world.npcs || []).some(n => n.is_processing)) {
+    renderWorld(state.world);
+  }
+}, 200);
+</script>
+</body>
+</html>

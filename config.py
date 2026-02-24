@@ -96,6 +96,13 @@ DEFAULT_TOKEN_LIMIT: int = 200_000
 LLM_TEMPERATURE: float = 0.85
 LLM_MAX_TOKENS: int = 2048
 
+# ── Hierarchical Agent Decision-Making ────────────────────────────────────────
+
+# World ticks between strategic (Level-1) LLM planning calls per NPC.
+# Execution (Level-3) calls happen every brain cycle; strategy only refreshes
+# when the tick counter crosses this threshold.
+NPC_STRATEGY_INTERVAL: int = 20
+
 # Town & Exchange
 TOWN_X: int = 9            # town area top-left corner X
 TOWN_Y: int = 9            # town area top-left corner Y

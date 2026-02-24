@@ -107,6 +107,11 @@ textarea{resize:vertical;min-height:60px}
 .energy-track{height:5px;background:#333355;border-radius:3px;overflow:hidden}
 .energy-fill{height:100%;border-radius:3px;transition:width .3s}
 .last-msg{font-style:italic;color:var(--text);font-size:12px;margin-top:4px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.npc-goal{font-size:11px;color:var(--teal);margin-top:3px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.npc-goal::before{content:"🎯 "}
+.npc-plan-steps{padding-left:14px;margin:4px 0 4px;list-style:none}
+.npc-plan-steps li{font-size:11px;color:var(--muted);padding:1px 0}
+.npc-plan-steps li::before{content:"→ ";color:var(--teal)}
 .npc-expand-btn{background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:2px 0;margin-top:4px}
 .npc-expand-btn:hover{color:var(--teal)}
 .npc-details{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
@@ -874,6 +879,9 @@ function renderNPCs(npcs){
     const items=['wood','stone','ore','food','herb','rope','potion','tool','bread','gold'];
     const invHtml=items.map(k=>{ const v=inv[k]||0; const nz=v>0; return `<span class="inv-chip ${nz?'nz':''}">${k.slice(0,3)}: ${typeof v==='number'&&v!==Math.floor(v)?v.toFixed(1):v}</span>`; }).join('');
     const goalHtml=(prof.goals||[]).map(g=>`<li style="font-size:11px">${escH(g)}</li>`).join('');
+    // Hierarchical plan display
+    const planSteps = Array.isArray(npc.plan) ? npc.plan : [];
+    const planHtml = planSteps.map((s,i)=>`<li>${i===0?`<strong>${escH(s)}</strong>`:escH(s)}</li>`).join('');
     const div=document.createElement('div'); div.className='npc-panel-card';
     div.innerHTML=`
       <div class="npc-panel-header">
@@ -891,11 +899,13 @@ function renderNPCs(npcs){
         <div class="energy-label">体力 ${npc.energy}/100 ${npc.equipped?`<span style="font-size:10px;color:var(--teal)">⚔${npc.equipped}</span>`:''} <span style="font-size:10px;color:var(--gold)">${npc.inv_count||0}/${npc.inv_max||20}格</span></div>
         <div class="energy-track"><div class="energy-fill" style="width:${ep}%;background:${ec}"></div></div>
       </div>
+      ${npc.goal?`<div class="npc-goal" title="${escH(npc.goal)}">${escH(npc.goal.slice(0,55))}${npc.goal.length>55?'…':''}</div>`:''}
       ${npc.last_message?`<div class="last-msg" title="${escH(npc.last_message)}">"${escH(npc.last_message.slice(0,50))}${npc.last_message.length>50?'…':''}"</div>`:''}
       ${npc.thought?`<div style="font-size:10px;color:var(--muted);margin-top:2px">💭 ${escH(npc.thought.slice(0,60))}</div>`:''}
       <button class="npc-expand-btn" onclick="toggleExpand(this)">▼ 展开详情</button>
       <div class="npc-details">
         ${prof.personality?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">性格: ${escH(prof.personality)}</div>`:''}
+        ${planHtml?`<div style="margin-bottom:6px"><div style="font-size:11px;font-weight:700;color:var(--teal);margin-bottom:2px">当前计划</div><ul class="npc-plan-steps">${planHtml}</ul></div>`:''}
         ${prof.backstory?`<div style="font-size:11px;margin-bottom:6px">${escH(prof.backstory)}</div>`:''}
         ${goalHtml?`<ul style="padding-left:16px;margin-bottom:6px">${goalHtml}</ul>`:''}
         <div class="inv-chips">${invHtml}</div>

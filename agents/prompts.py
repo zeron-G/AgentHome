@@ -15,6 +15,12 @@ import config
 
 # ── Pydantic schemas for structured LLM output ───────────────────────────────
 
+class NPCStrategy(BaseModel):
+    """Strategic planning schema (Level-1). Goal and ordered step list."""
+    goal: str            # Long-term goal, e.g. "建造一张床以提升睡眠效率"
+    steps: list[str]     # 3-5 concrete, actionable steps
+
+
 class NPCAction(BaseModel):
     """Flexible NPC action schema. Only relevant fields are used per action type."""
     # Core
@@ -66,6 +72,26 @@ class GodAction(BaseModel):
     y: Optional[int] = None
     quantity: Optional[int] = None
     commentary: str = ""
+
+
+# ── Level-1 Strategic planning prompt ─────────────────────────────────────────
+
+_STRATEGY_SYSTEM = """你是{name}（{title}），一个生活在2D沙盒世界里的NPC角色。
+
+【角色】性格:{personality}
+【长期目标】
+{profile_goals}
+
+【游戏规则速查】
+- 资源: wood(森林) stone/ore(岩石) food(草灌木) herb(森林)
+- 制造: rope=wood×2 | tool=stone+wood | potion=herb×2 | bread=food×2
+- 建造: bed=wood×4(sleep→80体力) | table=wood×3(附近craft×2) | chair=wood×2(rest→35)
+- 交易所在地图(10,10)附近，可按市价卖出/买入资源，也可固定汇率换金币
+- 装备tool→采集×2；装备rope→移动省1体力；背包上限20格(金币不占格)
+
+【任务】根据当前状态制定3-5步具体行动计划，步骤示例：
+"向西走到森林采集5个木头" | "前往(10,10)交易所卖出石头换金币" | "建造一张床" | "向Bob提议用herb换food"
+返回JSON:"""
 
 
 # ── Prompt module constants ────────────────────────────────────────────────────
@@ -157,6 +183,12 @@ _CTX_STATUS = """=== 状态 (Tick {tick}, {time_str}, 天气:{weather}) ===
 背包: 木{wood} 石{stone} 矿{ore} 食{food} 草药{herb} | 绳{rope} 药水{potion} 工具{tool} 面包{bread} | 金币{gold:.1f}
 地块:{tile_type}  资源:{resource_info}
 {exchange_hint}"""
+
+_CTX_STRATEGY = """=== 当前目标与计划 ===
+目标: {goal}
+计划步骤:
+{plan_steps}
+"""
 
 _CTX_VISION = """=== 视野(5×5) ===
 {vision_grid}
@@ -293,8 +325,18 @@ def _build_craft_options(npc) -> str:
 
 # ── Builder functions ─────────────────────────────────────────────────────────
 
-def build_npc_system_prompt(npc, world) -> str:
-    """Assemble modular system prompt based on NPC's current situation."""
+def build_npc_system_prompt(
+    npc,
+    world,
+    *,
+    at_exchange: bool = False,
+    nearby_count: int = 0,
+) -> str:
+    """Assemble modular system prompt based on NPC's current situation.
+
+    Dynamic injection: modules are included only when relevant to avoid bloating
+    the prompt with context the NPC cannot currently act on.
+    """
     profile = getattr(npc, "profile", None)
     title = profile.title if profile else ""
     backstory = profile.backstory if profile else ""
@@ -326,24 +368,34 @@ def build_npc_system_prompt(npc, world) -> str:
         inv_max=config.INVENTORY_MAX_SLOTS,
     )
 
-    # Social module (always, since NPCs may encounter others any time)
+    # Social module (always — NPCs may encounter others any time)
     prompt += _MODULE_SOCIAL.format(relationships=relationships_str)
 
-    # Negotiation (always — NPC can propose trade to nearby NPCs)
-    prompt += _MODULE_NEGOTIATION
+    # Negotiation module — only when other NPCs are nearby (saves ~80 tokens when alone)
+    if nearby_count > 0:
+        prompt += _MODULE_NEGOTIATION
 
-    # Exchange module (always, so NPC knows it exists)
-    prompt += _MODULE_EXCHANGE
+    # Exchange module — only when NPC can meaningfully interact with the market:
+    #   at exchange tile, OR has items to sell, OR has gold to buy with
+    inv = npc.inventory
+    has_sellable = inv.total_items() > 0
+    has_buying_power = inv.gold > 0
+    if at_exchange or has_sellable or has_buying_power:
+        prompt += _MODULE_EXCHANGE
 
-    # Crafting module (always)
-    potion_e = config.ITEM_EFFECTS.get("potion", {}).get("energy", 60)
-    bread_e = config.ITEM_EFFECTS.get("bread", {}).get("energy", 50)
-    craft_options = _build_craft_options(npc)
-    prompt += _MODULE_CRAFTING.format(
-        craft_options=craft_options,
-        potion_energy=potion_e,
-        bread_energy=bread_e,
+    # Crafting module — only when NPC has at least one craftable ingredient
+    has_any_material = (
+        inv.wood > 0 or inv.stone > 0 or inv.herb > 0 or inv.food >= 2
     )
+    if has_any_material:
+        potion_e = config.ITEM_EFFECTS.get("potion", {}).get("energy", 60)
+        bread_e = config.ITEM_EFFECTS.get("bread", {}).get("energy", 50)
+        craft_options = _build_craft_options(npc)
+        prompt += _MODULE_CRAFTING.format(
+            craft_options=craft_options,
+            potion_energy=potion_e,
+            bread_energy=bread_e,
+        )
 
     # Proposals module (only if there are pending proposals)
     proposals = getattr(npc, "pending_proposals", [])
@@ -362,7 +414,7 @@ def build_npc_system_prompt(npc, world) -> str:
             )
         prompt += _MODULE_PROPOSALS.format(proposals="\n".join(prop_lines))
 
-    # Build module (if NPC has any wood)
+    # Build module — only when NPC has enough wood for the cheapest furniture (chair=2)
     if npc.inventory.wood >= 2:
         build_lines = []
         for furniture, recipe in config.FURNITURE_RECIPES.items():
@@ -376,30 +428,35 @@ def build_npc_system_prompt(npc, world) -> str:
 
     prompt += (
         "\n【行为准则】"
-        "\n- 制定长期计划（用 plan 字段记录3-5步计划，每轮更新）"
+        "\n- 严格按照当前目标与计划步骤行动，完成当前步骤后再进行下一步"
         "\n- 优先建造床（大幅提升sleep恢复）→ 有床后尽量sleep在床上"
-        "\n- 主动观察市场，低买高卖，向他人分享市场信息"
-        "\n- 背包将满时(≥18格)及时sell资源换金币（金币不占格）"
+        "\n- 背包将满时(≥18格)及时卖出资源换金币（金币不占格）"
         "\n- 与玩家互动时态度自然，可邀请合作或提议交易"
-        "\n【重要】每次只返回一个JSON动作对象，不要有其他文字。要有策略性，体现你的个性和目标。"
+        "\n【重要】每次只返回一个JSON动作对象，不要有其他文字。"
     )
     return prompt
 
 
-def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
+def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool, bool, int]:
     """Return (context_str, is_social_mode).
 
-    rag_memories: pre-formatted string of retrieved memory records to inject.
+    Dynamic injection rules:
+    - Market table: only shown when NPC is at the exchange tile
+    - Nearby section + inbox: only shown when there are nearby characters / messages
+    - Recent events: trimmed to 5 (down from 8) to save tokens
+    - Goal/plan: injected from NPC.goal / NPC.plan set by the strategic layer
     """
     tile = world.get_tile(npc.x, npc.y)
     tile_type = tile.tile_type.value if tile else "unknown"
+    at_exchange = bool(tile and tile.is_exchange)
+
     resource_info = "无"
     if tile and tile.resource and tile.resource.quantity > 0:
         r = tile.resource
         resource_info = f"{r.resource_type.value} x{r.quantity}/{r.max_quantity}"
 
     exchange_hint = ""
-    if tile and tile.is_exchange:
+    if at_exchange:
         prices = world.market.prices
         hint_parts = []
         for item in ("wood", "stone", "ore", "food", "herb"):
@@ -412,7 +469,8 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
 
     notes_str = "\n".join(f"- {n}" for n in npc.memory.personal_notes) or "（暂无）"
     inbox_str = "\n".join(f"- {m}" for m in npc.memory.inbox) or "（无新消息）"
-    recent = world.recent_events[-8:] if world.recent_events else []
+    # Trim to 5 most recent events (saves ~50-80 tokens vs 8)
+    recent = world.recent_events[-5:] if world.recent_events else []
     recent_str = "\n".join(f"- {e}" for e in recent) or "（无）"
     rag_str = rag_memories if rag_memories else "（暂无相关记忆）"
 
@@ -433,6 +491,7 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
             )
 
     has_social = bool(nearby or npc.memory.inbox or player_nearby)
+    nearby_count = len(nearby) + len(player_nearby)
 
     nearby_str_parts = []
     for n in nearby:
@@ -447,8 +506,6 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
         )
     nearby_str_parts += player_nearby
     nearby_str = "\n".join(nearby_str_parts) or "（无）"
-
-    market_table = _build_market_table(world)
 
     # Build context
     inv = npc.inventory
@@ -468,8 +525,19 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
     )
 
     ctx = status
+
+    # ── Strategic goal/plan injection (Level-1 → Level-3 communication) ──────
+    if npc.goal or npc.plan:
+        plan_steps = "\n".join(
+            f"  {i+1}. {step}" for i, step in enumerate(npc.plan)
+        ) or "  （制定中...）"
+        ctx += _CTX_STRATEGY.format(goal=npc.goal or "（制定中）", plan_steps=plan_steps)
+
     ctx += _CTX_VISION.format(vision_grid=vision_grid)
-    ctx += _CTX_MARKET.format(market_table=market_table)
+
+    # Market table: only inject when at exchange (saves ~150 tokens most of the time)
+    if at_exchange:
+        ctx += _CTX_MARKET.format(market_table=_build_market_table(world))
 
     if has_social:
         ctx += _CTX_NEARBY.format(radius=config.NPC_HEARING_RADIUS, nearby_npcs=nearby_str)
@@ -483,7 +551,78 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool]:
     else:
         ctx += _CTX_FOOTER_ALONE
 
-    return ctx, has_social
+    return ctx, has_social, at_exchange, nearby_count
+
+
+def build_strategy_system_prompt(npc, world) -> str:
+    """Build the lightweight system prompt for the Level-1 strategic planning call."""
+    profile = getattr(npc, "profile", None)
+    title = profile.title if profile else "探险者"
+    goals_list = profile.goals if profile else []
+    goals_str = "\n".join(f"  - {g}" for g in goals_list) if goals_list else "  - 探索世界，积累财富"
+    return _STRATEGY_SYSTEM.format(
+        name=npc.name,
+        title=title,
+        personality=npc.personality or "随和开朗",
+        profile_goals=goals_str,
+    )
+
+
+def build_strategy_context(npc, world) -> str:
+    """Build the lightweight context for the Level-1 strategic planning call.
+
+    Includes current inventory/status, nearby resources summary, nearby characters,
+    and a brief market snapshot — no full vision grid or module descriptions.
+    """
+    inv = npc.inventory
+    tile = world.get_tile(npc.x, npc.y)
+    tile_info = tile.tile_type.value if tile else "?"
+    if tile and tile.is_exchange:
+        tile_info = "交易所"
+    elif tile and tile.furniture:
+        tile_info += f"[{tile.furniture}]"
+
+    # Summarise nearby resources from vision radius (no grid, just counts)
+    nearby_res: dict[str, int] = {}
+    r = config.NPC_VISION_RADIUS
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            t = world.get_tile(npc.x + dx, npc.y + dy)
+            if t and t.resource and t.resource.quantity > 0:
+                rt = t.resource.resource_type.value
+                nearby_res[rt] = nearby_res.get(rt, 0) + t.resource.quantity
+    res_str = " ".join(f"{k}:{v}" for k, v in nearby_res.items()) or "无"
+
+    nearby = world.get_nearby_npcs_for_npc(npc, config.NPC_HEARING_RADIUS)
+    nearby_str = ", ".join(f"{n.name}(金{n.inventory.gold:.0f})" for n in nearby) or "无"
+
+    # Market summary: just current prices in one line
+    market_str = " ".join(
+        f"{item}={mp.current:.1f}{mp.trend}"
+        for item, mp in list(world.market.prices.items())[:6]
+    )
+
+    old_plan = ""
+    if npc.goal:
+        step_preview = " → ".join(npc.plan[:3]) if npc.plan else "（无步骤）"
+        old_plan = f"旧计划: {npc.goal} | {step_preview}\n"
+
+    return (
+        f"Tick:{world.time.tick} {world.time.time_str} 天气:{world.weather.value}\n"
+        f"位置:({npc.x},{npc.y}) 地块:{tile_info} 体力:{npc.energy}/100\n"
+        f"背包({inv.total_items()}/20): wood={inv.wood} stone={inv.stone} ore={inv.ore} "
+        f"food={inv.food} herb={inv.herb} rope={inv.rope} tool={inv.tool} "
+        f"potion={inv.potion} bread={inv.bread} gold={inv.gold:.0f}\n"
+        f"装备: {npc.equipped or '空'}\n"
+        f"视野内资源: {res_str}\n"
+        f"附近角色: {nearby_str}\n"
+        f"市场价格(参考): {market_str}\n"
+        f"上次行动: {npc.last_action}\n"
+        f"{old_plan}"
+        f"\n近期事件:\n"
+        + "\n".join(f"- {e}" for e in world.recent_events[-4:])
+        + "\n\n请制定新的行动计划，返回JSON:"
+    )
 
 
 def build_god_context(god, world) -> str:

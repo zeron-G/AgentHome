@@ -103,6 +103,9 @@ class WorldSerializer:
             "inv_count": npc.inventory.total_items(),
             "inv_max": config.INVENTORY_MAX_SLOTS,
             "pending_proposals": len(getattr(npc, "pending_proposals", [])),
+            # Hierarchical decision-making state (Level-1 strategic layer)
+            "goal": getattr(npc, "goal", ""),
+            "plan": list(getattr(npc, "plan", [])),
         }
         # Conditionally include inner thought
         if config.SHOW_NPC_THOUGHTS and getattr(npc, "last_thought", ""):

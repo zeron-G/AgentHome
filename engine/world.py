@@ -257,6 +257,11 @@ class NPC:
     pending_proposals: list = field(default_factory=list)  # incoming trade proposals
     equipped: Optional[str] = None  # "tool" | "rope" | None (single equipment slot)
 
+    # ── Hierarchical decision-making (Level-1 Strategic layer) ─────────────
+    goal: str = ""                     # current long-term goal text
+    plan: list = field(default_factory=list)  # ordered list of plan-step strings
+    strategy_tick: int = -999          # world tick when strategy was last generated
+
 
 @dataclass
 class Player:

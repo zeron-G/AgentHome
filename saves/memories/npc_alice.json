@@ -1,97 +1,65 @@
 [
   {
-    "record_id": "592f6352",
+    "record_id": "c1c67285",
     "npc_id": "npc_alice",
-    "content": "行动: talk | 说: 嗨，玩家！你好呀！你今天过得怎么样？我正想着要去哪里找些矿石呢！",
+    "content": "行动: gather | 想: 哇，这里有好多草药！我要赶紧收集起来，为我的药水大计添砖加瓦！",
     "tags": [
-      "talk",
+      "gather",
       "day",
       "sunny"
     ],
-    "timestamp": 1771838413.885725,
-    "tick": 13,
+    "timestamp": 1771901340.588752,
+    "tick": 6,
     "location": [
-      5,
+      6,
       6
     ]
   },
   {
-    "record_id": "0a09be50",
+    "record_id": "b68e5f66",
     "npc_id": "npc_alice",
-    "content": "行动: move | 想: 我刚刚和玩家打过招呼了，现在该动身去寻找矿石了！朝左边的岩石地块移动。",
+    "content": "行动: craft",
+    "tags": [
+      "craft",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771901347.934246,
+    "tick": 9,
+    "location": [
+      6,
+      6
+    ]
+  },
+  {
+    "record_id": "3ebdc571",
+    "npc_id": "npc_alice",
+    "content": "行动: gather | 想: 我刚刚学会了酿造药水，真是太棒了！现在我要继续采集草药，多准备一些！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771901358.2375453,
+    "tick": 12,
+    "location": [
+      6,
+      6
+    ]
+  },
+  {
+    "record_id": "e1b98f7e",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 哇，我看到旁边有好多草药！我要赶紧过去采集，离我的药水大计又近了一步啦！",
     "tags": [
       "move",
       "day",
       "sunny"
     ],
-    "timestamp": 1771838420.5163403,
-    "tick": 16,
+    "timestamp": 1771901474.4247112,
+    "tick": 6,
     "location": [
-      5,
-      6
-    ]
-  },
-  {
-    "record_id": "60ee4d72",
-    "npc_id": "npc_alice",
-    "content": "行动: talk | 说: 你好呀，玩家！我正打算去旁边的岩石地块看看有没有矿石，你呢？有什么计划吗？",
-    "tags": [
-      "talk",
-      "day",
-      "sunny"
-    ],
-    "timestamp": 1771838430.141756,
-    "tick": 19,
-    "location": [
-      4,
-      6
-    ]
-  },
-  {
-    "record_id": "98e03d74",
-    "npc_id": "npc_alice",
-    "content": "行动: move | 想: 嗯，我得赶紧去岩石区看看，说不定能找到闪闪发光的矿石呢！",
-    "tags": [
-      "move",
-      "day",
-      "sunny"
-    ],
-    "timestamp": 1771838439.040027,
-    "tick": 22,
-    "location": [
-      4,
-      6
-    ]
-  },
-  {
-    "record_id": "be37e4d6",
-    "npc_id": "npc_alice",
-    "content": "行动: talk | 说: 你好呀玩家！我刚到这块岩石上，不过这里好像没有矿石，我看到旁边有呢！你找到什么好东西了吗？",
-    "tags": [
-      "talk",
-      "dusk",
-      "sunny"
-    ],
-    "timestamp": 1771838447.5576377,
-    "tick": 25,
-    "location": [
-      3,
-      5
-    ]
-  },
-  {
-    "record_id": "d9a0f28f",
-    "npc_id": "npc_alice",
-    "content": "行动: move | 想: 哎呀，这里没有矿石！我看到上面有闪闪发光的矿石了，我要赶紧过去看看！",
-    "tags": [
-      "move",
-      "dusk",
-      "sunny"
-    ],
-    "timestamp": 1771838455.5261872,
-    "tick": 27,
-    "location": [
-      3,
+      6,
       5
     ]
   }

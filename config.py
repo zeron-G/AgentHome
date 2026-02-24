@@ -76,7 +76,7 @@ DEFAULT_TOKEN_LIMIT: int = 200_000
 
 # LLM generation
 LLM_TEMPERATURE: float = 0.85
-LLM_MAX_TOKENS: int = 1024
+LLM_MAX_TOKENS: int = 2048
 
 # Town & Exchange
 TOWN_X: int = 9            # town area top-left corner X

@@ -118,6 +118,10 @@ class BaseAgent:
             if response.usage_metadata:
                 await self.token_tracker.record(self.agent_id, response.usage_metadata)
 
+            # Prefer response.parsed (native structured output, already a Pydantic model)
+            if getattr(response, "parsed", None) is not None:
+                return response.parsed
+
             text = response.text
             if not text:
                 return None

@@ -10,7 +10,7 @@
 
 **一个 2D 沙盒 AI 世界：4 个 NPC + 1 个上帝，每个角色由大语言模型独立控制。**
 
-NPC 自主决策、互相交谈、采集资源、在城镇交易所买卖，一切通过浏览器实时可视化。
+NPC 自主决策、互相交谈、采集资源、建造家具、在城镇交易所买卖，一切通过浏览器实时可视化。
 
 </div>
 
@@ -20,14 +20,21 @@ NPC 自主决策、互相交谈、采集资源、在城镇交易所买卖，一�
 
 | 类别 | 特性 |
 |------|------|
-| 🤖 **AI 控制** | 4 NPC + 1 上帝，各有独立记忆与个性，每 5–10s 自主决策一次 |
+| 🤖 **分级 AI 决策** | 三层架构：战略层（每 20 tick LLM 制定目标/计划）→ 战术层（规则推进）→ 执行层（LLM 执行单步） |
+| 🧠 **动态上下文注入** | Prompt 模块按当前状态条件化组装（背包空→不注入交易模块，独处→不注入社交模块），节省约 30–50% tokens |
 | 🌐 **双 LLM 后端** | Google Gemini（云端）或任意 OpenAI 兼容本地服务（Ollama / LM Studio / vLLM…） |
-| 🏘️ **城镇与交易所** | 中央城镇 + 交易所：卖资源换金币、花金币买食物 |
-| 🌾 **食物系统** | 食物灌木丛、吃食物/睡眠回血、体力归零自动进食 |
-| ⚡ **实时可视化** | WebSocket 驱动，HTML5 Canvas 渲染地块/NPC/气泡/天气粒子 |
-| 🎮 **上帝控制** | 浏览器界面直接控制天气、刷新资源，无需 LLM |
-| ⚙️ **网页设置** | API Key、模型、Token 限额、LLM 提供商，热更新无需重启服务器 |
+| 👤 **统一角色系统** | NPC 与玩家共享相同动作/装备/背包规则，逻辑对等 |
+| ⚔️ **装备系统** | 单装备槽（tool→采集×2 / rope→移动-1体力），use_item 即装备 |
+| 🎒 **背包容量** | 最多 20 格（金币不占格），满了无法继续采集/购买 |
+| 🪵 **家具建造** | 可建造床/桌/椅，影响 sleep/rest/craft 效果；NPC 和玩家均可建造 |
+| 💬 **NPC→玩家对话** | NPC 对玩家说话时弹出对话框，快速回复选项由上帝 Agent 异步生成 |
+| 🎮 **玩家动作平权** | 支持 craft/sell/buy/equip/build/propose_trade/dialogue_reply 等完整动作 |
+| 📈 **浮动市场** | 供需+天气驱动的动态价格，历史曲线可视化 |
+| 🏘️ **城镇与交易所** | 中央城镇 + 交易所：按市价卖/买，固定汇率备用 |
+| ⚡ **实时可视化** | WebSocket 驱动，HTML5 Canvas 渲染地块/NPC/气泡/家具/天气粒子 |
+| 🎲 **上帝控制** | 浏览器界面直接控制天气、刷新资源，也支持 LLM 驱动的上帝自主干预 |
 | 📊 **Token 追踪** | 实时进度条，超限自动暂停，可动态扩额续跑 |
+| 💾 **RAG 记忆持久化** | NPC 行动存入本地 JSON，语义检索注入上下文 |
 
 ---
 
@@ -42,7 +49,6 @@ pip install -r requirements.txt
 ### 2. 配置密钥（可选，也可在网页 UI 中设置）
 
 ```bash
-# 复制模板并填入你的 Gemini API Key
 cp .env.example .env
 # 编辑 .env，填入 GEMINI_API_KEY=AIzaSy...
 ```
@@ -57,11 +63,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 4. 打开浏览器
 
-访问 
-**http://localhost:8000**
-，游戏自动开始。
-
-首次启动若未配置密钥，点击右侧 **⚙ 设置** 标签页，输入 Gemini API Key 或配置本地模型后保存即可。
+访问 **http://localhost:8000**，点击 **Start** 开始模拟。
 
 ---
 
@@ -76,25 +78,25 @@ agenthome/
 │
 ├── engine/
 │   ├── world.py         # 数据模型（Tile、NPC、Inventory、World、世界生成）
-│   └── world_manager.py # 世界状态变更（所有动作处理器）
+│   └── world_manager.py # 世界状态变更（所有动作处理器，NPC/玩家通用）
 │
 ├── agents/
 │   ├── base_agent.py    # LLM 基类（Gemini / 本地双后端，懒加载，热更新）
-│   ├── npc_agent.py     # NPC 决策代理
-│   ├── god_agent.py     # 上帝决策代理
-│   └── prompts.py       # 提示词模板 + Pydantic 动作 Schema
+│   ├── npc_agent.py     # NPC 三层决策代理（战略/战术/执行）
+│   ├── god_agent.py     # 上帝决策代理 + 对话选项生成
+│   └── prompts.py       # 提示词模板 + Pydantic Schema（NPCStrategy/NPCAction/GodAction）
 │
 ├── game/
-│   ├── loop.py          # 异步游戏主循环（独立 brain loop）
-│   ├── events.py        # 事件类型、WorldEvent、EventBus
+│   ├── loop.py          # 异步游戏主循环（独立 brain loop、对话异步任务）
+│   ├── events.py        # 事件类型（40+）、WorldEvent、EventBus
 │   └── token_tracker.py # Token 统计与限额控制
 │
 ├── ws/
 │   ├── manager.py       # WebSocket 连接池 + 广播
-│   └── serializer.py    # World → 紧凑 JSON
+│   └── serializer.py    # World → 紧凑 JSON（含 goal/plan/furniture/dialogue）
 │
 ├── frontend/
-│   └── index.html       # 单文件前端（Canvas + 5 选项卡面板：世界、经济、NPC、地图编辑器、设置）
+│   └── index.html       # 单文件前端（Canvas + 5 选项卡面板）
 │
 └── docs/                # 详细文档
     ├── architecture.md  # 架构设计与并发模型
@@ -104,6 +106,44 @@ agenthome/
     ├── api-reference.md # REST API + WebSocket 协议参考
     └── config.md        # 所有配置常量速查
 ```
+
+---
+
+## Agent 架构：三层分级决策
+
+```
+┌─────────────────────────────────────────────────────┐
+│           NPC Brain Loop (每 5–10s)                  │
+│                                                     │
+│  Layer 1 ─ 战略层 (每 20 world tick，轻量 LLM)        │
+│    输入: 状态摘要 + 视野资源 + 市场概要 (~300 chars)    │
+│    输出: NPCStrategy { goal, steps[3-5] }           │
+│    存储: npc.goal / npc.plan / npc.strategy_tick    │
+│                                                     │
+│  Layer 2 ─ 战术层 (规则推断，0 LLM 调用)              │
+│    检查 last_action + 步骤关键词 → pop 已完成步骤      │
+│                                                     │
+│  Layer 3 ─ 执行层 (每 brain cycle，主 LLM 调用)       │
+│    上下文: 状态 + 目标/计划注入 + 视野网格              │
+│    动态模块: 按当前状态条件化包含                       │
+│    输出: NPCAction (单步具体动作)                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Token 效益**（相较旧版单层架构）：
+- 执行层 prompt 减少约 30–50%（不注入无关模块/市场表）
+- 策略层调用频率极低（约每 60 秒 1 次），context 极小
+- NPC 行为连贯性显著提升，不再每步"从头思考"
+
+---
+
+## Token 用量估算
+
+| 模型 | 约 tokens/NPC/执行决策 | 200k 限额可运行 |
+|------|----------------------|----------------|
+| gemini-2.5-flash | ~500–900（动态注入后） | 约 45–90 分钟 |
+| gemini-2.0-flash | ~400–800 | 约 60–100 分钟 |
+| 本地模型 | 不计入限额 | 不受限制 |
 
 ---
 
@@ -120,13 +160,90 @@ agenthome/
 
 ---
 
-## Token 用量估算
+## 未来发展方向
 
-| 模型 | 约 tokens/NPC/决策 | 200k 限额可运行 |
-|------|-------------------|----------------|
-| gemini-2.5-flash | ~800–1,200 | 约 30–60 分钟 |
-| gemini-2.0-flash | ~600–1,000 | 约 40–70 分钟 |
-| 本地模型 | 不计入限额 | 不受限制 |
+以下是项目规划的演进路线，按优先级排列。
+
+### 🔴 P0 — 已完成 / 进行中
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 三层分级决策架构 | ✅ 完成 | Strategic/Tactical/Execution 三层，减少 LLM 调用成本，提升行为连贯性 |
+| 动态上下文注入 | ✅ 完成 | Prompt 模块按状态条件化，市场表仅在交易所显示，节省约 30–50% tokens |
+
+### 🟠 P1 — 近期规划
+
+#### 前端渲染引擎升级（HTML Canvas → Phaser.js）
+
+当前前端用原生 Canvas 手写渲染，限制明显：无 tileset、无精灵动画、无摄像机缩放。
+
+计划迁移到 **Phaser.js**（纯 JS，WebSocket 复用，迁移成本最低）：
+- 支持精灵动画（NPC 行走/睡觉/交谈）
+- Tileset 地图（视觉质量大幅提升）
+- 摄像机跟随、缩放、点击交互
+- 后端保持 Python + WebSocket 不变，前端完全解耦
+
+> Unreal/Unity 对于当前 2D Tile 游戏属于过度工程，暂不考虑。
+
+#### WebSocket 增量更新（Delta Diff）
+
+当前每 tick 广播完整世界快照（全部 tiles + NPCs），随地图变大 payload 会膨胀。
+
+计划：
+- 初次连接发送完整 `world_state`
+- 后续只发 `world_delta`（变化的格子、变化的 NPC）
+- 预计减少 80%+ 的数据传输量
+
+### 🟡 P2 — 中期规划
+
+#### 动态叙事系统（替代线性主线剧情）
+
+不采用传统线性主线（与 LLM 涌现式行为冲突），而是由**上帝 Agent 作为导演**动态生成叙事弧：
+
+- 上帝根据世界状态生成"世界事件"（如"村子食物短缺"、"矿区发现稀有矿石"）
+- NPC 自发响应这些事件，形成有机叙事
+- 玩家可介入或旁观，结局不固定
+- 重玩性远高于手写剧情
+
+#### 内容可扩展性（应对物品/配方数量增长）
+
+随着物品从 ~10 种增长到 ~50 种，当前"全量上下文"策略会崩溃。
+
+规划：
+- **物品分类化**：`category: tool | consumable | material | equipment`，Agent 先选类别再选物品（二级决策）
+- **按需上下文**：只注入当前背包中有的物品 + 附近可见资源，不是全量列表
+- **物品 RAG 知识库**：物品效果/配方存入 RAG，Agent 查询时按需检索，不占常驻 context
+
+### 🟢 P3 — 长期探索
+
+#### 更丰富的社会系统
+
+- NPC 间形成派系、联盟、竞争关系（已有关系系统基础）
+- 长期记忆驱动的仇恨/友谊演化（RAG 加强）
+- NPC 可以雇佣/被雇佣、组队采集
+
+#### 世界规模扩大
+
+- 地图扩展（当前 20×20，可扩展到 40×40+）
+- 多区域/多生态（沙漠、雪地、海洋区域，各有特产资源）
+- 跨区域贸易路线
+
+#### 玩家叙事深度
+
+- 玩家角色有身份背景（初始设定：商人/探险者/工匠）
+- 任务系统：NPC 主动向玩家提出请求
+- 玩家声望系统（对不同 NPC 群体的好感度）
+
+---
+
+## 技术选型说明
+
+| 方向 | 当前选择 | 理由 |
+|------|---------|------|
+| 后端语言 | Python | LLM API 生态最成熟，瓶颈是 API 延迟而非计算性能，无需迁移 |
+| LLM 框架 | 自研（Pydantic + Gemini native） | 清晰可控，LangChain 抽象过厚、版本变化剧烈，不引入 |
+| 前端渲染 | HTML Canvas → 计划迁移 Phaser.js | Phaser 是最低迁移成本的升级路径，Unreal/Unity 对 2D Tile 过度工程 |
+| Agent 框架 | 自研三层架构 | 游戏场景特殊，通用 Agent 框架（AutoGen/CrewAI）不适配实时游戏循环 |
 
 ---
 

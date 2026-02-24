@@ -18,8 +18,13 @@
 - [Agent 记忆参数](#agent-记忆参数)
 - [LLM 生成参数](#llm-生成参数)
 - [Token 追踪](#token-追踪)
-- [城镇与交易所](#城镇与交易所)
+- [市场系统](#市场系统)
+- [制造系统](#制造系统)
+- [城镇与交易所（传统汇率）](#城镇与交易所传统汇率)
 - [能量系统](#能量系统)
+- [功能开关](#功能开关)
+- [玩家角色](#玩家角色)
+- [RAG 记忆持久化](#rag-记忆持久化)
 - [调参建议](#调参建议)
 
 ---
@@ -41,6 +46,9 @@ GEMINI_MODEL=gemini-2.5-flash
 # 本地 LLM
 LOCAL_LLM_BASE_URL=http://localhost:11434/v1
 LOCAL_LLM_MODEL=qwen2.5:7b
+
+# 玩家
+PLAYER_NAME=玩家
 ```
 
 ### 方式二：直接修改 config.py
@@ -60,6 +68,7 @@ NPC_MIN_THINK_SECONDS = 10.0   # NPC 决策更慢（节省 Token）
 - 模型名称
 - Token 限额
 - LLM 提供商 / 本地服务地址 / 本地模型名
+- 游戏速度、NPC 感知半径、能量恢复量等
 
 热更新立即生效，无需重启服务器。
 
@@ -154,19 +163,8 @@ WORLD_TICK_SECONDS    = 1.0
 | 常量 | 默认值 | 单位 | 说明 |
 |------|--------|------|------|
 | `NPC_HEARING_RADIUS` | `5` | 格（曼哈顿距离） | NPC 能"听到"事件的最大距离 |
-| `NPC_ADJACENT_RADIUS` | `1` | 格 | NPC 能进行交易/互动的最大距离（通常为 1，即相邻格） |
-
-### 曼哈顿距离说明
-
-```
-曼哈顿距离 = |x1 - x2| + |y1 - y2|
-
-NPC_HEARING_RADIUS = 5 意味着：
-Alice 在 (5,5)，Bob 在 (9,5)（距离=4）→ Alice 能听到 Bob 说话
-Alice 在 (5,5)，Dave 在 (14,14)（距离=18）→ Alice 听不到
-```
-
-调大 `NPC_HEARING_RADIUS` 会让 NPC 互动范围更广，但 context 会变长（更多事件进入收件箱）。
+| `NPC_ADJACENT_RADIUS` | `1` | 格 | NPC 能进行交易/互动的最大距离 |
+| `NPC_VISION_RADIUS` | `2` | 格 | NPC 视野半径（可见区域为 `(2r+1)²` 格） |
 
 ---
 
@@ -196,15 +194,6 @@ Alice 在 (5,5)，Dave 在 (14,14)（距离=18）→ Alice 听不到
 | `0.7–0.9` | 默认范围，创意与稳定性平衡 |
 | `1.0–1.2` | 行为多变有创意，但 JSON 格式错误率上升（本地模型慎用） |
 
-### Max Tokens 调优
-
-NPC 响应通常在 100–300 tokens 内，`1024` 已足够。
-
-若使用本地模型且经常出现截断响应，可适当增大：
-```python
-LLM_MAX_TOKENS = 2048
-```
-
 ---
 
 ## Token 追踪
@@ -226,7 +215,75 @@ LLM_MAX_TOKENS = 2048
 
 ---
 
-## 城镇与交易所
+## 市场系统
+
+动态市场价格系统，每隔固定 tick 根据供需与天气更新。
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `MARKET_UPDATE_INTERVAL` | `5` | 市场价格更新间隔（ticks） |
+| `MARKET_VOLATILITY` | `0.15` | 价格随机波动幅度（±15%） |
+| `MARKET_SMOOTHING` | `0.3` | 价格响应速度（0=冻结，1=瞬时更新） |
+| `MARKET_PRICE_MIN_RATIO` | `0.3` | 价格下限 = 基础价 × 0.3 |
+| `MARKET_PRICE_MAX_RATIO` | `3.0` | 价格上限 = 基础价 × 3.0 |
+
+### 基础价格（`MARKET_BASE_PRICES`）
+
+| 物品 | 基础价（金） | 说明 |
+|------|------------|------|
+| `wood` | `1.5` | 木头（森林采集） |
+| `stone` | `2.5` | 石头（岩石地块采集） |
+| `ore` | `6.0` | 矿石（岩石地块稀有采集） |
+| `food` | `3.0` | 食物（草原/城镇附近采集） |
+| `herb` | `4.0` | 草药（森林采集） |
+| `rope` | `4.0` | 绳子（制造品） |
+| `potion` | `10.0` | 药水（制造品） |
+| `tool` | `8.0` | 工具（制造品） |
+| `bread` | `6.0` | 面包（制造品） |
+
+### 价格计算公式
+
+```
+target = base × (demand / supply) × weather_mod × noise(±volatility)
+current = current × (1 - smoothing) + target × smoothing
+```
+
+天气影响系数：
+- 暴风（storm）：食物 +40%，草药 -30%
+- 雨天（rainy）：草药 +20%
+- 晴天（sunny）：无修正
+
+---
+
+## 制造系统
+
+NPC 可消耗原材料制造高价值物品。
+
+### 制造配方（`CRAFTING_RECIPES`）
+
+| 成品 | 材料 |
+|------|------|
+| `rope` | 木头 ×2 |
+| `potion` | 草药 ×2 |
+| `tool` | 石头 ×1 + 木头 ×1 |
+| `bread` | 食物 ×2 |
+
+### 物品效果（`ITEM_EFFECTS`）
+
+| 物品 | 使用效果 | 说明 |
+|------|---------|------|
+| `potion` | 体力 +60 | 使用后消耗 |
+| `bread` | 体力 +50 | 使用后消耗 |
+| `tool` | 采集产量 ×2 | 持续生效直到放弃 |
+| `rope` | 移动体力消耗 -1 | 持续生效直到放弃 |
+
+> 使用 `use_item` 动作激活物品效果（消耗品立即消耗，工具/绳子为持续状态）。
+
+---
+
+## 城镇与交易所（传统汇率）
+
+以下固定汇率用于传统 `exchange`/`buy_food` 动作（NPC 站在交易所 `is_exchange=True` 地块时可用）。市场系统的 `sell`/`buy` 动作则使用浮动市场价。
 
 | 常量 | 默认值 | 说明 |
 |------|--------|------|
@@ -234,12 +291,10 @@ LLM_MAX_TOKENS = 2048
 | `TOWN_Y` | `9` | 城镇区域左上角 Y 坐标 |
 | `EXCHANGE_X` | `10` | 交易所地块 X 坐标 |
 | `EXCHANGE_Y` | `10` | 交易所地块 Y 坐标 |
-| `EXCHANGE_RATE_WOOD` | `1` | 木头卖出价格（金/个） |
-| `EXCHANGE_RATE_STONE` | `2` | 石头卖出价格（金/个） |
-| `EXCHANGE_RATE_ORE` | `5` | 矿石卖出价格（金/个） |
-| `FOOD_COST_GOLD` | `3` | 购买 1 个食物的价格（金） |
-
-> ⚠️ 修改交易所坐标需同步更新 `agents/prompts.py` 中的系统提示词，确保 NPC 知道正确位置。
+| `EXCHANGE_RATE_WOOD` | `1` | 木头固定卖出价格（金/个） |
+| `EXCHANGE_RATE_STONE` | `2` | 石头固定卖出价格（金/个） |
+| `EXCHANGE_RATE_ORE` | `5` | 矿石固定卖出价格（金/个） |
+| `FOOD_COST_GOLD` | `3` | 购买 1 个食物的固定价格（金） |
 
 ---
 
@@ -255,13 +310,48 @@ LLM_MAX_TOKENS = 2048
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | `rest` 回复量 | `20` | 休息动作回复体力 |
-| 移动消耗 | `2–3`（随机） | 每次移动消耗的体力 |
+| 移动消耗 | `2–3`（随机） | 每次移动消耗的体力（有绳子 -1） |
 | 采集消耗 | `5` | 每次采集消耗的体力 |
 | 白天体力消耗 | `3/tick` | 晴天白天每 tick 消耗 |
 | 雨天额外消耗 | `+1/tick` | 雨天/暴风额外体力消耗 |
 | 夜晚消耗 | `2/tick` | 夜间体力消耗（低于白天） |
 | 木头/石头/矿石再生周期 | `10 tick` | 每 10 tick 再生一次 |
 | 食物再生周期 | `15 tick` | 每 15 tick 再生一次 |
+| 草药再生周期 | `12 tick` | 每 12 tick 再生一次 |
+| 提案过期时间 | `10 tick` | 超时未响应的交易提案自动清除 |
+
+---
+
+## 功能开关
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `SIMULATION_AUTO_START` | `False` | `True` = 服务器启动后自动开始模拟；`False` = 需玩家点击开始 |
+| `SHOW_NPC_THOUGHTS` | `True` | `True` = 在前端显示 NPC 内心想法（`thought` 字段） |
+
+---
+
+## 玩家角色
+
+| 常量 | 环境变量 | 默认值 | 说明 |
+|------|---------|--------|------|
+| `PLAYER_ENABLED` | — | `True` | 是否生成玩家角色 |
+| `PLAYER_NAME` | `PLAYER_NAME` | `"玩家"` | 玩家角色名称 |
+| `PLAYER_START_X` | — | `12` | 玩家初始 X 坐标 |
+| `PLAYER_START_Y` | — | `12` | 玩家初始 Y 坐标 |
+
+---
+
+## RAG 记忆持久化
+
+NPC 的重要行动会被保存到本地文件，下次游戏会话时通过语义搜索召回。
+
+| 常量 | 环境变量 | 默认值 | 说明 |
+|------|---------|--------|------|
+| `RAG_ENABLED` | — | `True` | 是否启用 RAG 记忆持久化 |
+| `RAG_SAVE_DIR` | `RAG_SAVE_DIR` | `"saves"` | 记忆文件保存目录 |
+| `RAG_MAX_MEMORIES_PER_NPC` | — | `200` | 每个 NPC 最多保存的记忆条数 |
+| `RAG_SEARCH_LIMIT` | — | `5` | 每次决策从 RAG 召回的记忆条数 |
 
 ---
 
@@ -305,13 +395,23 @@ LLM_TEMPERATURE       = 0.7   # 略低，减少 JSON 格式错误
 DEFAULT_TOKEN_LIMIT   = 999_999_999  # 本地模型不计费，设大
 ```
 
-### 场景四：经济模拟重点
+### 场景四：活跃市场经济
 
-增加经济行为频率：
+增加经济与制造行为频率：
 
 ```python
-EXCHANGE_RATE_ORE   = 10   # 矿石更值钱，激励采矿
-FOOD_COST_GOLD      = 1    # 食物便宜，NPC 更愿意购买
-FOOD_ENERGY_RESTORE = 50   # 吃食物回复更多，食物更有价值
-SLEEP_ENERGY_RESTORE = 30  # 降低睡眠收益，让 NPC 倾向购买食物
+MARKET_UPDATE_INTERVAL = 3    # 更频繁的价格波动
+MARKET_VOLATILITY      = 0.25 # 更大的价格波动幅度
+MARKET_SMOOTHING       = 0.5  # 价格响应更快
+# 调低基础价让利润空间更大，鼓励 NPC 更多交易
+MARKET_BASE_PRICES["ore"] = 8.0
+```
+
+### 场景五：天气影响明显
+
+加大天气对食物价格的影响：
+
+```python
+# 修改 world_manager.py 中的 weather_mod 系数
+# storm: food ×2.0 (原 ×1.4)，herb ×0.5 (原 ×0.7)
 ```

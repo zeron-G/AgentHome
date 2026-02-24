@@ -1,1502 +1,1088 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AgentHome - LLM 沙盒世界</title>
+<title>AgentHome — LLM沙盒世界</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f1a;--panel:#1a1a2e;--card:#16213e;--border:#2a2a4a;
+  --red:#e94560;--gold:#f5a623;--teal:#4ecca3;--text:#e0e0f0;--muted:#8888aa;
+  --green:#4caf50;--blue:#2196f3;--purple:#9c27b0;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;overflow:hidden;height:100vh}
+button{cursor:pointer;border:none;border-radius:6px;padding:6px 14px;font-size:13px;transition:all .15s}
+input,textarea,select{background:#222240;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;width:100%}
+input[type=color]{padding:2px 4px;height:36px}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal)}
+textarea{resize:vertical;min-height:60px}
+.btn-primary{background:var(--teal);color:#000;font-weight:600}
+.btn-primary:hover{background:#3db892}
+.btn-red{background:var(--red);color:#fff}
+.btn-red:hover{background:#c73a52}
+.btn-gold{background:var(--gold);color:#000;font-weight:600}
+.btn-gold:hover{background:#d4901f}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
 
-  body {
-    background: #1a1a2e;
-    color: #e0e0e0;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    font-size: 13px;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-  }
+/* ─── COVER ─── */
+#cover-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+#cover-canvas{position:absolute;inset:0;pointer-events:none}
+.cover-content{position:relative;text-align:center}
+.cover-logo{font-size:64px;font-weight:900;background:linear-gradient(135deg,var(--teal),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-2px;line-height:1}
+.cover-sub{color:var(--muted);font-size:18px;margin:12px 0 48px}
+.cover-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.cover-btn{padding:14px 36px;font-size:16px;font-weight:600;border-radius:10px}
 
-  /* ── Top bar ── */
-  #topbar {
-    background: #16213e;
-    border-bottom: 1px solid #0f3460;
-    padding: 5px 12px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-  #topbar h1 { font-size: 14px; color: #e94560; font-weight: 700; letter-spacing: 1px; }
-  .stat-chip {
-    background: #0f3460;
-    border-radius: 12px;
-    padding: 2px 8px;
-    font-size: 11px;
-    color: #a0c4ff;
-  }
-  .stat-chip span { color: #fff; font-weight: 600; }
-  #ws-status {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #f44;
-    box-shadow: 0 0 6px #f44;
-  }
-  #ws-status.connected { background: #4f4; box-shadow: 0 0 6px #4f4; }
+/* ─── MODALS ─── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:200}
+.modal-overlay.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:760px;width:90vw;max-height:88vh;overflow-y:auto}
+.modal-title{font-size:20px;font-weight:700;margin-bottom:18px;color:var(--teal)}
+.modal-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
+.modal-tab{background:transparent;border:none;color:var(--muted);padding:8px 18px;font-size:14px;cursor:pointer;border-bottom:2px solid transparent}
+.modal-tab.active{color:var(--teal);background:rgba(78,204,163,.1);border-bottom-color:var(--teal)}
+.modal-body{display:none}.modal-body.active{display:block}
 
-  /* Simulation toggle */
-  #sim-btn {
-    padding: 4px 14px;
-    border-radius: 16px;
-    border: none;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: #2a7a2a;
-    color: #fff;
-    letter-spacing: 0.5px;
-  }
-  #sim-btn.running { background: #8a1010; }
-  #sim-btn:hover { opacity: 0.85; }
+/* Map editor */
+#map-editor-canvas{border:2px solid var(--border);border-radius:8px;cursor:crosshair;display:block;margin:10px auto}
+.tile-palette{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+.palette-btn{padding:6px 14px;border-radius:6px;border:2px solid transparent;font-size:12px;cursor:pointer;color:#fff}
+.palette-btn.active{border-color:#fff !important}
 
-  /* Token bar */
-  #token-bar-wrap {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: #aaa; margin-left: auto;
-  }
-  #token-bar { width: 80px; height: 7px; background: #0f3460; border-radius: 4px; overflow: hidden; }
-  #token-fill { height: 100%; background: linear-gradient(90deg,#4caf50,#ff9800); border-radius:4px; transition: width 0.4s; }
-  #token-fill.danger { background: linear-gradient(90deg,#ff9800,#f44336); }
+/* NPC cards in modal */
+.npc-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.npc-card-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.npc-dot{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
+.npc-card-name{font-size:15px;font-weight:700}
+.npc-card-title{color:var(--muted);font-size:12px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.form-group{margin-bottom:10px}
+.form-group label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+.goals-row{display:flex;flex-direction:column;gap:5px}
 
-  /* ── Main content ── */
-  #main { display: flex; flex: 1; overflow: hidden; }
+/* ─── GAME SCREEN ─── */
+#game-screen{display:none;flex-direction:column;height:100vh}
+#game-screen.visible{display:flex}
 
-  /* ── Left: Canvas ── */
-  #canvas-wrap { position: relative; flex-shrink: 0; background: #0d1b2a; padding: 8px; }
-  #world-canvas { display: block; cursor: crosshair; image-rendering: pixelated; }
-  #canvas-overlay {
-    position: absolute; top: 8px; left: 8px;
-    pointer-events: none; font-size: 11px; color: rgba(255,255,255,0.7);
-    background: rgba(0,0,0,0.5); padding: 2px 6px; border-radius: 4px;
-  }
+/* Header */
+#game-header{background:var(--panel);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;min-width:0}
+.header-logo{font-weight:800;font-size:15px;background:linear-gradient(90deg,var(--teal),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.header-time{color:var(--gold);font-size:12px;min-width:150px;white-space:nowrap}
+.header-weather{font-size:18px}
+#token-bar-wrap{flex:1;max-width:260px;min-width:100px}
+.token-label{font-size:10px;color:var(--muted);margin-bottom:2px}
+.progress-track{height:5px;background:#333355;border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:var(--teal);border-radius:3px;transition:width .4s}
+.progress-fill.warn{background:var(--gold)}.progress-fill.danger{background:var(--red)}
+#btn-sim{padding:6px 16px;font-size:12px;font-weight:600;white-space:nowrap}
+.btn-home{background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 6px}
+.btn-home:hover{color:var(--text)}
 
-  /* Paused overlay */
-  #paused-overlay {
-    display: none; position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px;
-    background: rgba(0,0,0,0.75); justify-content: center; align-items: center;
-    flex-direction: column; gap: 12px; pointer-events: all;
-  }
-  #paused-overlay.show { display: flex; }
-  #paused-overlay h2 { color: #ff9800; font-size: 18px; }
-  #paused-overlay p { color: #aaa; font-size: 12px; }
+/* Main area */
+#main-area{display:flex;flex:1;overflow:hidden;min-height:0}
+#canvas-wrap{position:relative;background:#0a0a15;overflow:hidden;flex-shrink:0}
+#world-canvas{display:block}
+#canvas-status{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:var(--muted);font-size:11px;padding:3px 8px;pointer-events:none}
 
-  /* Sim stopped overlay */
-  #stopped-overlay {
-    display: flex; position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px;
-    background: rgba(0,0,0,0.6); justify-content: center; align-items: center;
-    flex-direction: column; gap: 16px; pointer-events: all; z-index: 5;
-  }
-  #stopped-overlay h2 { color: #5c8adf; font-size: 20px; }
-  #stopped-overlay p { color: #888; font-size: 12px; text-align: center; max-width: 300px; line-height: 1.6; }
-  #start-big-btn {
-    padding: 12px 32px; border-radius: 24px; border: none;
-    font-size: 16px; font-weight: 700; cursor: pointer;
-    background: linear-gradient(135deg,#2a7a2a,#4caf50); color: #fff;
-    box-shadow: 0 0 20px rgba(76,175,80,0.4); transition: all 0.2s;
-  }
-  #start-big-btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(76,175,80,0.6); }
+/* Side panel */
+#side-panel{width:340px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.side-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.side-tab{flex:1;background:transparent;border:none;color:var(--muted);padding:9px 2px;font-size:11px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.side-tab:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.side-tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.side-content{flex:1;overflow-y:auto;padding:12px}
+.side-content::-webkit-scrollbar{width:4px}
+.side-content::-webkit-scrollbar-thumb{background:#333355;border-radius:2px}
 
-  /* ── Right panel ── */
-  #right-panel {
-    flex: 1; display: flex; flex-direction: column;
-    background: #16213e; border-left: 1px solid #0f3460;
-    overflow: hidden; min-width: 300px; max-width: 380px;
-  }
+/* NPC panel cards */
+.npc-panel-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px}
+.npc-panel-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.npc-mini-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#fff;flex-shrink:0}
+.npc-panel-name{font-size:14px;font-weight:700;flex:1}
+.npc-title-badge{font-size:10px;background:rgba(78,204,163,.15);color:var(--teal);padding:2px 6px;border-radius:4px}
+.energy-bar-wrap{margin:4px 0 6px}
+.energy-label{font-size:11px;color:var(--muted);margin-bottom:2px}
+.energy-track{height:5px;background:#333355;border-radius:3px;overflow:hidden}
+.energy-fill{height:100%;border-radius:3px;transition:width .3s}
+.last-msg{font-style:italic;color:var(--text);font-size:12px;margin-top:4px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.npc-expand-btn{background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:2px 0;margin-top:4px}
+.npc-expand-btn:hover{color:var(--teal)}
+.npc-details{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.npc-details.open{display:block}
+.inv-chips{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
+.inv-chip{background:#222240;padding:2px 5px;border-radius:4px;font-size:10px}
+.inv-chip.nz{color:var(--gold)}
+.proposal-badge{background:rgba(233,69,96,.2);color:var(--red);font-size:10px;padding:2px 6px;border-radius:4px}
 
-  /* Tabs */
-  #tabs { display: flex; background: #0f3460; border-bottom: 1px solid #1a4080; }
-  .tab-btn {
-    flex: 1; padding: 7px 4px; border: none; background: transparent;
-    color: #aaa; font-size: 11px; cursor: pointer;
-    border-bottom: 2px solid transparent; transition: all 0.2s;
-  }
-  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
-  .tab-btn.active { color: #e94560; border-bottom-color: #e94560; }
+/* Economy */
+.section-title{font-size:12px;font-weight:700;color:var(--teal);margin:10px 0 8px;text-transform:uppercase;letter-spacing:.3px}
+.market-table{width:100%;border-collapse:collapse;font-size:12px}
+.market-table th{text-align:left;padding:4px 5px;color:var(--muted);border-bottom:1px solid var(--border)}
+.market-table td{padding:4px 5px;border-bottom:1px solid rgba(42,42,74,.4)}
+.market-table tr.up td{color:#ffaaaa}.market-table tr.down td{color:#aaccff}
+.trend-up{color:#ff6666}.trend-down{color:#66aaff}.trend-flat{color:var(--muted)}
+#price-chart-canvas{width:100%;border-radius:6px;background:#111128;display:block;margin-top:6px}
+.trade-log{max-height:140px;overflow-y:auto;font-size:11px}
+.trade-log-item{padding:3px 0;border-bottom:1px solid rgba(42,42,74,.4);color:var(--muted)}
+.tli-sell{color:#aaffaa}.tli-buy{color:#aaccff}.tli-craft{color:#ffdd99}.tli-accept{color:var(--teal)}
 
-  .tab-content { display: none; flex: 1; overflow-y: auto; padding: 8px; }
-  .tab-content.active { display: flex; flex-direction: column; gap: 7px; }
+/* Controls */
+.weather-btns{display:flex;gap:8px;margin-bottom:14px}
+.weather-btn{flex:1;padding:8px;font-size:14px;border-radius:8px;background:var(--card);border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.weather-btn:hover,.weather-btn.active-weather{border-color:var(--teal);background:rgba(78,204,163,.1)}
+.spawn-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px}
+.spawn-row select{flex:2}.spawn-row input[type=number]{flex:1}
+#god-commentary{background:var(--card);border-left:3px solid var(--purple);padding:10px;font-style:italic;color:var(--muted);border-radius:0 6px 6px 0;font-size:12px;min-height:38px;margin-bottom:14px}
+.coord-display{font-size:11px;color:var(--muted);margin-bottom:10px}
 
-  /* Panel sections */
-  .panel-section {
-    background: #0f2540; border: 1px solid #1a4080; border-radius: 8px; padding: 9px;
-  }
-  .panel-section h3 {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-    color: #5c8adf; margin-bottom: 7px; border-bottom: 1px solid #1a4080; padding-bottom: 3px;
-  }
+/* Settings */
+.settings-group{background:var(--card);border-radius:8px;padding:12px;margin-bottom:12px}
+.settings-group-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.setting-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.setting-row label{flex:1;font-size:12px;color:var(--muted)}
+.setting-row input[type=range]{flex:1;accent-color:var(--teal)}
+.setting-val{min-width:36px;text-align:right;font-size:12px}
+.toggle-wrap{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.toggle{width:38px;height:20px;background:#333355;border-radius:10px;position:relative;cursor:pointer;border:none;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--teal)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s}
+.toggle.on::after{left:20px}
+.provider-tabs{display:flex;gap:6px;margin-bottom:10px}
+.provider-tab{flex:1;padding:6px;text-align:center;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:transparent;color:var(--muted);transition:all .15s}
+.provider-tab.active{background:rgba(78,204,163,.12);border-color:var(--teal);color:var(--teal)}
+.api-key-wrap{display:flex;gap:6px}
+.api-key-wrap input{flex:1}
+.danger-zone{background:rgba(233,69,96,.08);border:1px solid rgba(233,69,96,.3);border-radius:8px;padding:12px;margin-bottom:12px}
 
-  /* Buttons */
-  .btn-group { display: flex; gap: 5px; flex-wrap: wrap; }
-  .btn {
-    padding: 4px 10px; border: none; border-radius: 6px; font-size: 11px; cursor: pointer;
-    background: #1a4080; color: #c0d8ff; border: 1px solid #2a5099; transition: all 0.15s;
-  }
-  .btn:hover { background: #2a5099; color: #fff; }
-  .btn.active { background: #e94560; color: #fff; border-color: #e94560; }
-  .btn.green { background: #1a4020; border-color: #2a6030; color: #80e0a0; }
-  .btn.green:hover { background: #2a6030; }
-  .btn.red { background: #401010; border-color: #602020; color: #e08080; }
-  .btn.red:hover { background: #602020; }
-  .btn.sunny { border-color: #ffcc02; color: #ffcc02; }
-  .btn.sunny:hover { background: #ffcc02; color: #000; }
-  .btn.rainy { border-color: #5b9bd5; color: #5b9bd5; }
-  .btn.rainy:hover { background: #5b9bd5; color: #fff; }
-  .btn.storm { border-color: #9c27b0; color: #9c27b0; }
-  .btn.storm:hover { background: #9c27b0; color: #fff; }
-  .btn.gold { border-color: #ffd700; color: #ffd700; }
-  .btn.gold:hover { background: #ffd700; color: #000; }
+/* Player bar */
+#player-bar{background:var(--panel);border-top:1px solid var(--border);padding:8px 14px;display:none;flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap}
+#player-bar.visible{display:flex}
+.player-stat{font-size:12px;color:var(--muted);white-space:nowrap}
+.player-stat b{color:var(--gold)}
+.dpad{display:grid;grid-template-columns:repeat(3,26px);grid-template-rows:repeat(3,26px);gap:2px}
+.dpad button{width:26px;height:26px;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12px;border-radius:4px;padding:0}
+.dpad button:hover{border-color:var(--teal)}
+.dpad .blank{background:transparent;border:none;pointer-events:none}
+.talk-wrap{display:flex;gap:5px;align-items:center}
+.talk-wrap input{width:120px}
 
-  /* God commentary */
-  #god-commentary {
-    background: #0a1e3a; border: 1px solid #2a5099; border-radius: 6px;
-    padding: 7px 9px; font-style: italic; color: #a0bfe0; font-size: 11px; min-height: 32px;
-  }
+/* Event log */
+#event-log-wrap{background:var(--panel);border-top:1px solid var(--border);flex-shrink:0}
+.event-log-header{display:flex;align-items:center;justify-content:space-between;padding:3px 12px;border-bottom:1px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none}
+.event-log-header span{font-size:11px;color:var(--muted)}
+#event-log{height:72px;overflow-y:auto;padding:3px 12px}
+#event-log.collapsed{display:none}
+#event-log::-webkit-scrollbar{width:4px}
+#event-log::-webkit-scrollbar-thumb{background:#333355;border-radius:2px}
+.log-entry{font-size:11px;padding:1px 0;border-bottom:1px solid rgba(42,42,74,.25);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-talk{color:var(--teal)}.log-trade{color:var(--gold)}.log-gather{color:#8bc34a}
+.log-weather{color:#aa88ff}.log-market{color:#6699ff}.log-craft{color:#ffbb66}.log-default{color:var(--muted)}
 
-  /* NPC list */
-  .npc-card {
-    background: #0a1e3a; border: 1px solid #1a4080; border-radius: 8px;
-    padding: 7px 9px; cursor: pointer; transition: all 0.15s; margin-bottom: 4px;
-  }
-  .npc-card:hover { border-color: #5c8adf; }
-  .npc-card.selected { border-color: #e94560; }
-  .npc-header { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
-  .npc-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
-  .npc-name { font-weight: 600; font-size: 12px; flex: 1; }
-  .npc-pos { font-size: 10px; color: #888; }
-  .npc-action-badge {
-    font-size: 9px; padding: 1px 5px; border-radius: 8px;
-    background: #1a4080; color: #a0c4ff;
-  }
-  .npc-action-badge.talk { background: #1a6040; color: #80ffb0; }
-  .npc-action-badge.gather { background: #3a4010; color: #d0f080; }
-  .npc-action-badge.trade { background: #402010; color: #ffb060; }
-  .npc-action-badge.exchange, .npc-action-badge.buy_food { background: #403010; color: #ffd060; }
-  .npc-action-badge.sleep { background: #201040; color: #c080ff; }
-  .npc-action-badge.eat { background: #3a1010; color: #ff8080; }
-
-  .energy-bar { height: 3px; background: #1a4080; border-radius: 2px; overflow: hidden; margin: 3px 0; }
-  .energy-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-  .inv-chips { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 3px; }
-  .inv-chip { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: #1a3060; color: #80a0e0; }
-  .inv-chip.gold { background: #3a2a00; color: #ffd700; }
-  .inv-chip.food { background: #1a3a1a; color: #80ff80; }
-
-  .npc-message {
-    font-size: 10px; color: #a0bfe0; font-style: italic; margin-top: 3px;
-    padding: 3px 7px; background: rgba(255,255,255,0.04);
-    border-left: 2px solid #5c8adf; border-radius: 0 3px 3px 0;
-  }
-  .npc-thought {
-    font-size: 10px; color: #8070c0; margin-top: 3px;
-    padding: 2px 7px; background: rgba(128,80,200,0.08);
-    border-left: 2px solid #8060c0; border-radius: 0 3px 3px 0; font-style: italic;
-  }
-  .npc-chat-btns { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
-
-  /* Player panel */
-  #player-panel {
-    background: #0f2a1a; border: 1px solid #2a6040; border-radius: 8px; padding: 9px;
-  }
-  #player-panel h3 { color: #60d080; border-bottom-color: #2a6040; }
-  .player-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  #player-chat-area { margin-top: 6px; }
-  #player-chat-row { display: flex; gap: 5px; }
-  #player-chat-input {
-    flex: 1; background: #0a1e0a; border: 1px solid #2a6040; border-radius: 5px;
-    color: #e0ffe0; padding: 5px 8px; font-size: 11px; outline: none;
-  }
-  #player-chat-input:focus { border-color: #4caf50; }
-  #player-target-select {
-    background: #0a1e0a; border: 1px solid #2a6040; border-radius: 5px;
-    color: #e0ffe0; padding: 4px 6px; font-size: 11px; outline: none; cursor: pointer;
-  }
-  #player-inbox {
-    max-height: 80px; overflow-y: auto; margin-top: 5px;
-    background: #061206; border: 1px solid #1a4020; border-radius: 4px; padding: 3px 6px;
-    font-size: 10px; color: #80c080; line-height: 1.6;
-  }
-
-  /* Trade modal */
-  #trade-modal {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75);
-    justify-content: center; align-items: center; z-index: 100;
-  }
-  #trade-modal.show { display: flex; }
-  #trade-box {
-    background: #16213e; border: 1px solid #2a5099; border-radius: 12px;
-    padding: 18px; min-width: 280px; max-width: 340px;
-  }
-  #trade-box h3 { color: #5c8adf; margin-bottom: 12px; font-size: 13px; }
-  .trade-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .trade-row label { font-size: 11px; color: #aaa; width: 60px; flex-shrink: 0; }
-  .trade-row select, .trade-row input {
-    flex: 1; background: #0a1e3a; border: 1px solid #1a4080; border-radius: 5px;
-    color: #e0e0e0; padding: 4px 8px; font-size: 11px; outline: none;
-  }
-  .trade-btns { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
-
-  /* Settings */
-  .setting-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
-  .setting-row label { font-size: 10px; color: #aaa; display: flex; justify-content: space-between; }
-  .setting-row label span { color: #a0c4ff; font-weight: 600; }
-  .setting-input {
-    background: #0a1e3a; border: 1px solid #1a4080; border-radius: 5px;
-    color: #e0e0e0; padding: 5px 8px; font-size: 11px; width: 100%; outline: none;
-  }
-  .setting-input:focus { border-color: #5c8adf; }
-  .api-key-wrap { display: flex; gap: 5px; }
-  .api-key-wrap .setting-input { flex: 1; }
-  .api-key-status { font-size: 10px; padding: 2px 7px; border-radius: 5px; margin-top: 3px; }
-  .api-key-status.set { background: #1a3a1a; color: #80ff80; }
-  .api-key-status.unset { background: #3a1a1a; color: #ff8080; }
-  select.setting-input { cursor: pointer; }
-  input[type=range] {
-    -webkit-appearance: none; width: 100%; height: 4px;
-    background: #1a4080; border-radius: 2px; outline: none;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
-    background: #5c8adf; cursor: pointer;
-  }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .checkbox-row input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: #5c8adf; }
-  .checkbox-row label { font-size: 11px; color: #ccc; cursor: pointer; }
-
-  /* Saves section */
-  .save-info { font-size: 10px; color: #888; margin-bottom: 6px; line-height: 1.7; }
-  .npc-memory-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .npc-memory-row span { flex: 1; font-size: 11px; }
-  .npc-memory-row small { color: #666; font-size: 10px; }
-
-  /* ── Chat log ── */
-  #chat-wrap {
-    background: #0d1b2a; border-top: 1px solid #0f3460;
-    display: flex; flex-direction: column; height: 140px; flex-shrink: 0;
-  }
-  #chat-header {
-    display: flex; align-items: center; padding: 3px 10px;
-    background: #16213e; border-bottom: 1px solid #0f3460;
-    font-size: 10px; color: #5c8adf; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
-  }
-  #chat-clear { margin-left: auto; background: transparent; border: none; color: #555; cursor: pointer; font-size: 10px; }
-  #chat-clear:hover { color: #e94560; }
-  #chat-log { flex: 1; overflow-y: auto; padding: 4px 10px; font-size: 11px; line-height: 1.5; }
-  .chat-line { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-  .chat-talk { color: #a0d0ff; }
-  .chat-player { color: #80e0a0; font-weight: 600; }
-  .chat-gather { color: #a0d080; }
-  .chat-trade { color: #ffa060; }
-  .chat-exchange { color: #ffd060; }
-  .chat-sleep { color: #c080ff; }
-  .chat-eat { color: #ff8080; }
-  .chat-weather { color: #80d0ff; }
-  .chat-god { color: #c0a0ff; font-style: italic; }
-  .chat-system { color: #555; }
-
-  /* Divider helper */
-  .section-divider { border: none; border-top: 1px solid #1a3060; margin: 6px 0; }
+/* Scrollbars */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#333355;border-radius:3px}
 </style>
 </head>
 <body>
 
-<!-- Top bar -->
-<div id="topbar">
-  <h1>⚡ AgentHome</h1>
-  <button id="sim-btn" onclick="toggleSimulation()">▶ 启动模拟</button>
-  <div class="stat-chip">Tick <span id="tick-val">0</span></div>
-  <div class="stat-chip"><span id="time-val">Day 1 06:00</span></div>
-  <div class="stat-chip"><span id="weather-val">☀ 晴天</span></div>
-  <div id="token-bar-wrap">
-    <div id="token-bar"><div id="token-fill" style="width:0%"></div></div>
-    <span id="token-text">0/200k</span>
+<!-- ═══════════ COVER SCREEN ═══════════ -->
+<div id="cover-screen">
+  <canvas id="cover-canvas"></canvas>
+  <div class="cover-content">
+    <div class="cover-logo">AgentHome</div>
+    <div class="cover-sub">LLM驱动的AI沙盒世界</div>
+    <div class="cover-btns">
+      <button class="cover-btn btn-primary" onclick="openNewGameModal()">🎮 新游戏</button>
+      <button class="cover-btn btn-gold" onclick="openLoadModal()">📁 读取存档</button>
+      <button class="cover-btn btn-ghost" onclick="quickStart()">⚡ 快速开始</button>
+    </div>
   </div>
-  <div id="ws-status" title="WebSocket 状态"></div>
 </div>
 
-<!-- Main -->
-<div id="main">
-
-  <!-- Canvas area -->
-  <div id="canvas-wrap">
-    <canvas id="world-canvas" width="600" height="600"></canvas>
-    <div id="canvas-overlay"></div>
-
-    <!-- Simulation not started overlay -->
-    <div id="stopped-overlay">
-      <h2>⏸ 模拟未启动</h2>
-      <p>点击下方按钮开始模拟。<br>WASD 键控制玩家移动，点击 NPC 可发起对话或交易。</p>
-      <button id="start-big-btn" onclick="startSimulation()">▶ 启动模拟</button>
+<!-- ═══════════ NEW GAME MODAL ═══════════ -->
+<div class="modal-overlay" id="new-game-modal">
+  <div class="modal">
+    <div class="modal-title">🎮 新游戏设置</div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchNewTab('map',0)">🗺️ 地图设置</button>
+      <button class="modal-tab" onclick="switchNewTab('npc',1)">👥 NPC档案</button>
     </div>
-
-    <!-- Token limit paused overlay -->
-    <div id="paused-overlay">
-      <h2>⏸ 已暂停（Token 超限）</h2>
-      <p>请增加 Token 限额后恢复</p>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="new-limit-input" type="number" class="setting-input" style="width:120px"
-               placeholder="新限额" min="10000" step="10000">
-        <button class="btn active" onclick="applyNewLimit()">恢复</button>
+    <!-- Map tab -->
+    <div class="modal-body active" id="new-tab-map">
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:12px">
+        <div class="form-group" style="margin:0;flex:1"><label>世界种子</label><input type="number" id="seed-input" value="42"></div>
+        <button class="btn-ghost" onclick="randomSeed()">🎲 随机</button>
+      </div>
+      <div class="tile-palette">
+        <button class="palette-btn active" style="background:#3d7a24" data-tile="grass" onclick="selectPalette(this,'grass')">草地</button>
+        <button class="palette-btn" style="background:#555" data-tile="rock" onclick="selectPalette(this,'rock')">岩石</button>
+        <button class="palette-btn" style="background:#1e5c2c" data-tile="forest" onclick="selectPalette(this,'forest')">森林</button>
+        <button class="palette-btn" style="background:#8b6914" data-tile="town" onclick="selectPalette(this,'town')">城镇</button>
+        <button class="palette-btn" style="background:#1565c0" data-tile="water" onclick="selectPalette(this,'water')">水域</button>
+      </div>
+      <canvas id="map-editor-canvas" width="400" height="400"></canvas>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn-primary" style="padding:10px 40px;font-size:15px" onclick="startGame()">▶ 开始游戏</button>
+        <button class="btn-ghost" style="margin-left:10px" onclick="closeModal('new-game-modal')">取消</button>
+      </div>
+    </div>
+    <!-- NPC tab -->
+    <div class="modal-body" id="new-tab-npc">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn-ghost" style="font-size:12px" onclick="exportProfiles()">📤 导出全部</button>
+        <label class="btn-ghost" style="display:inline-flex;align-items:center;padding:6px 14px;font-size:12px;cursor:pointer">
+          📥 导入JSON <input type="file" accept=".json" style="display:none" onchange="importProfiles(this)">
+        </label>
+      </div>
+      <div id="npc-profile-cards">
+        <div style="color:var(--muted);text-align:center;padding:20px">加载中…</div>
+      </div>
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn-primary" style="padding:10px 40px;font-size:15px" onclick="startGame()">▶ 开始游戏</button>
+        <button class="btn-ghost" style="margin-left:10px" onclick="closeModal('new-game-modal')">取消</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Right panel -->
-  <div id="right-panel">
-    <div id="tabs">
-      <button class="tab-btn active" onclick="showTab('player')">🎮 玩家</button>
-      <button class="tab-btn" onclick="showTab('god')">⚡ 上帝</button>
-      <button class="tab-btn" onclick="showTab('npcs')">👥 NPC</button>
-      <button class="tab-btn" onclick="showTab('settings')">⚙ 设置</button>
+<!-- ═══════════ LOAD MODAL ═══════════ -->
+<div class="modal-overlay" id="load-modal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">📁 读取存档</div>
+    <div id="save-list"><div style="color:var(--muted);text-align:center;padding:20px">加载中…</div></div>
+    <div style="margin-top:14px;display:flex;justify-content:space-between;gap:10px">
+      <button class="btn-red" onclick="deleteAllSaves()">🗑 删除所有存档</button>
+      <button class="btn-ghost" onclick="closeModal('load-modal')">关闭</button>
     </div>
+  </div>
+</div>
 
-    <!-- Player Tab -->
-    <div id="tab-player" class="tab-content active">
-
-      <!-- Player status -->
-      <div id="player-panel" class="panel-section">
-        <h3>🎮 玩家状态</h3>
-        <div class="player-status-row">
-          <div id="player-god-badge" style="display:none;font-size:10px;padding:2px 7px;background:#3a1a40;border:1px solid #c080ff;border-radius:8px;color:#c080ff">⚡ 上帝模式</div>
-        </div>
-        <div id="player-stats" style="font-size:11px;color:#aaa;line-height:2">
-          位置: <span id="p-pos" style="color:#80e0a0">-</span> &nbsp;
-          体力: <span id="p-energy" style="color:#4caf50">100</span>/100
-        </div>
-        <div class="energy-bar" style="margin:4px 0">
-          <div id="p-energy-fill" class="energy-fill" style="width:100%;background:#4caf50"></div>
-        </div>
-        <div class="inv-chips" id="player-inv"></div>
-        <div style="margin-top:8px">
-          <div style="font-size:10px;color:#888;margin-bottom:3px">操作: WASD移动 · G采集 · E吃食物</div>
-          <div class="btn-group">
-            <button class="btn green" onclick="playerAction({action:'gather'})">G 采集</button>
-            <button class="btn green" onclick="playerAction({action:'eat'})">E 吃食物</button>
-            <button class="btn gold" onclick="playerAction({action:'exchange',exchange_item:'wood',exchange_qty:1})" title="在交易所出售">卖资源</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chat with NPC -->
-      <div class="panel-section">
-        <h3>💬 与 NPC 对话</h3>
-        <div id="player-chat-area">
-          <div id="player-chat-row">
-            <select id="player-target-select">
-              <option value="">广播（所有人）</option>
-            </select>
-            <input id="player-chat-input" type="text" placeholder="输入消息…" maxlength="120"
-                   onkeydown="if(event.key==='Enter')sendPlayerChat()">
-            <button class="btn green" onclick="sendPlayerChat()">发送</button>
-          </div>
-          <div id="player-inbox" style="margin-top:5px"><span style="color:#555">暂无消息</span></div>
-        </div>
-      </div>
-
-      <!-- Trade with NPC -->
-      <div class="panel-section">
-        <h3>🤝 与 NPC 交易</h3>
-        <div style="font-size:10px;color:#888;margin-bottom:6px">选择附近 NPC 发起交易（需在相邻格内）</div>
-        <div id="trade-npc-btns" class="btn-group"></div>
-      </div>
+<!-- ═══════════ NPC EDIT MODAL ═══════════ -->
+<div class="modal-overlay" id="npc-edit-modal">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-title">✏️ 编辑NPC档案</div>
+    <input type="hidden" id="edit-npc-id">
+    <div class="form-row">
+      <div class="form-group"><label>名字</label><input id="edit-name"></div>
+      <div class="form-group"><label>颜色</label><input type="color" id="edit-color"></div>
     </div>
+    <div class="form-group"><label>称号</label><input id="edit-title"></div>
+    <div class="form-group"><label>背景故事</label><textarea id="edit-backstory" rows="3"></textarea></div>
+    <div class="form-group"><label>性格</label><textarea id="edit-personality" rows="2"></textarea></div>
+    <div class="form-group"><label>目标（每行一个）</label><textarea id="edit-goals" rows="3" placeholder="目标1&#10;目标2&#10;目标3"></textarea></div>
+    <div class="form-group"><label>说话风格</label><input id="edit-speech-style"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn-primary" style="flex:1" onclick="saveNPCEdit()">💾 保存</button>
+      <button class="btn-ghost" onclick="closeModal('npc-edit-modal')">取消</button>
+    </div>
+  </div>
+</div>
 
-    <!-- God Tab -->
-    <div id="tab-god" class="tab-content">
-      <div class="panel-section">
-        <h3>🌤 天气控制</h3>
-        <div class="btn-group">
-          <button class="btn sunny" onclick="setWeather('sunny')">☀ 晴天</button>
-          <button class="btn rainy" onclick="setWeather('rainy')">🌧 雨天</button>
-          <button class="btn storm" onclick="setWeather('storm')">⛈ 暴风</button>
-        </div>
+<!-- ═══════════ GAME SCREEN ═══════════ -->
+<div id="game-screen">
+
+  <!-- HEADER -->
+  <div id="game-header">
+    <div class="header-logo">AgentHome</div>
+    <div class="header-time" id="header-time">Day 1 06:00 · 晨</div>
+    <div class="header-weather" id="header-weather">☀️</div>
+    <div id="token-bar-wrap">
+      <div class="token-label" id="token-label">0 / 0 tokens</div>
+      <div class="progress-track"><div class="progress-fill" id="token-fill" style="width:0%"></div></div>
+    </div>
+    <button id="btn-sim" class="btn-primary" onclick="toggleSim()">▶ 开始</button>
+    <button class="btn-home" title="返回封面" onclick="backToCover()">⌂</button>
+  </div>
+
+  <!-- MAIN AREA -->
+  <div id="main-area">
+    <!-- Canvas -->
+    <div id="canvas-wrap">
+      <canvas id="world-canvas"></canvas>
+      <div id="canvas-status">双击地图设置资源生成坐标</div>
+    </div>
+    <!-- Side panel -->
+    <div id="side-panel">
+      <div class="side-tabs">
+        <button class="side-tab active" data-tab="npc" onclick="switchTab('npc',this)">👥 NPC</button>
+        <button class="side-tab" data-tab="eco" onclick="switchTab('eco',this)">📊 经济</button>
+        <button class="side-tab" data-tab="ctrl" onclick="switchTab('ctrl',this)">🎮 控制</button>
+        <button class="side-tab" data-tab="settings" onclick="switchTab('settings',this)">⚙️ 设置</button>
       </div>
 
-      <div class="panel-section">
-        <h3>📦 刷新资源</h3>
-        <div class="btn-group" id="spawn-btns">
-          <button class="btn" onclick="selectSpawn('wood',this)">🌲 木头</button>
-          <button class="btn" onclick="selectSpawn('stone',this)">🪨 石头</button>
-          <button class="btn" onclick="selectSpawn('ore',this)">💎 矿石</button>
-          <button class="btn" onclick="selectSpawn('food',this)">🌾 食物</button>
-        </div>
-        <div id="spawn-info" style="font-size:10px;color:#888;margin-top:5px;line-height:1.6">
-          选中类型后点击地图选择位置<br>
-          位置: <span id="spawn-pos" style="color:#a0c4ff;font-weight:600">未选择</span>
-          <span id="spawn-confirm-wrap" style="display:none">
-            &nbsp;<button class="btn active" onclick="confirmSpawn()" style="padding:2px 8px;font-size:10px">确认刷新</button>
-          </span>
-        </div>
+      <!-- NPC TAB -->
+      <div class="side-content" id="tab-npc"></div>
+
+      <!-- ECONOMY TAB -->
+      <div class="side-content" id="tab-eco" style="display:none">
+        <div class="section-title">💰 市场价格</div>
+        <table class="market-table">
+          <thead><tr><th>物品</th><th>当前价</th><th>基准</th><th>趋势</th><th>变化%</th></tr></thead>
+          <tbody id="market-tbody"></tbody>
+        </table>
+        <div class="section-title" style="margin-top:12px">📈 价格历史</div>
+        <select id="chart-item-sel" style="width:100%;margin-bottom:8px" onchange="drawPriceChart()">
+          <option value="wood">木头</option><option value="stone">石头</option>
+          <option value="ore">矿石</option><option value="food">食物</option>
+          <option value="herb">草药</option><option value="rope">绳索</option>
+          <option value="potion">药水</option><option value="tool">工具</option>
+          <option value="bread">面包</option>
+        </select>
+        <canvas id="price-chart-canvas" width="300" height="140"></canvas>
+        <div class="section-title" style="margin-top:12px">📋 最近交易</div>
+        <div class="trade-log" id="trade-log"></div>
       </div>
 
-      <div class="panel-section">
-        <h3>🌐 上帝旁白</h3>
+      <!-- CONTROLS TAB -->
+      <div class="side-content" id="tab-ctrl" style="display:none">
+        <div class="section-title">🌤️ 天气控制</div>
+        <div class="weather-btns">
+          <button class="weather-btn" data-w="sunny" onclick="setWeather('sunny')">☀️ 晴天</button>
+          <button class="weather-btn" data-w="rainy" onclick="setWeather('rainy')">🌧️ 雨天</button>
+          <button class="weather-btn" data-w="storm" onclick="setWeather('storm')">⛈️ 暴风</button>
+        </div>
+        <div class="section-title">✨ 资源生成</div>
+        <div class="spawn-row">
+          <select id="spawn-res-type">
+            <option value="wood">木头</option><option value="stone">石头</option>
+            <option value="ore">矿石</option><option value="food">食物</option>
+            <option value="herb">草药</option>
+          </select>
+          <input type="number" id="spawn-qty" value="5" min="1" max="10" style="width:56px">
+          <button class="btn-primary" onclick="spawnResource()">✨ 生成</button>
+        </div>
+        <div class="coord-display" id="spawn-coord">双击地图选择目标坐标</div>
+        <div class="section-title">💬 神明旁白</div>
         <div id="god-commentary">世界在我的注视下缓缓运转...</div>
+        <div class="section-title" style="margin-top:14px">⏱️ 仿真控制</div>
+        <button id="btn-sim2" class="btn-primary" style="width:100%;padding:10px;margin-bottom:8px" onclick="toggleSim()">▶ 开始仿真</button>
       </div>
 
-      <div class="panel-section">
-        <h3>🎮 游戏控制</h3>
-        <div class="btn-group">
-          <button class="btn" onclick="sendControl('pause')">⏸ 暂停AI</button>
-          <button class="btn" onclick="sendControl('resume')">▶ 恢复AI</button>
-          <button class="btn" onclick="sendControl('save_game')">💾 保存</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- NPC Tab -->
-    <div id="tab-npcs" class="tab-content">
-      <div id="npc-list"></div>
-    </div>
-
-    <!-- Settings Tab -->
-    <div id="tab-settings" class="tab-content">
-
-      <!-- LLM Provider -->
-      <div class="panel-section">
-        <h3>🔌 LLM 提供商</h3>
-        <div class="btn-group" style="margin-bottom:7px">
-          <button class="btn active" id="provider-gemini" onclick="selectProvider('gemini')">☁ Gemini</button>
-          <button class="btn" id="provider-local" onclick="selectProvider('local')">🖥 本地</button>
-        </div>
-        <div id="gemini-settings">
-          <div class="setting-row">
-            <label>Gemini API Key</label>
-            <div class="api-key-wrap">
-              <input type="password" id="api-key-input" class="setting-input" placeholder="AIzaSy...">
-              <button class="btn" onclick="toggleApiKeyVisibility()">👁</button>
+      <!-- SETTINGS TAB -->
+      <div class="side-content" id="tab-settings" style="display:none">
+        <div class="settings-group">
+          <div class="settings-group-title">LLM 配置</div>
+          <div class="provider-tabs">
+            <button class="provider-tab active" id="prov-gemini" onclick="setProvider('gemini')">☁️ Gemini</button>
+            <button class="provider-tab" id="prov-local" onclick="setProvider('local')">🖥️ 本地LLM</button>
+          </div>
+          <div id="gemini-fields">
+            <div class="form-group"><label>API Key</label>
+              <div class="api-key-wrap">
+                <input type="password" id="api-key-input" placeholder="AIza...">
+                <button class="btn-ghost" style="padding:6px 10px;flex-shrink:0" onclick="toggleApiVis()">👁</button>
+              </div>
             </div>
-            <div id="api-key-status" class="api-key-status unset">未设置</div>
+            <div class="form-group"><label>模型名称</label><input id="model-name-input" placeholder="gemini-1.5-flash"></div>
+          </div>
+          <div id="local-fields" style="display:none">
+            <div class="form-group"><label>Base URL</label><input id="local-url-input" placeholder="http://localhost:11434/v1"></div>
+            <div class="form-group"><label>模型名称</label><input id="local-model-input" placeholder="qwen2.5:7b"></div>
+          </div>
+          <button class="btn-primary" style="width:100%;margin-top:6px" onclick="saveLLMSettings()">💾 保存LLM设置</button>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Token 限制</div>
+          <div class="setting-row">
+            <label>Session上限</label>
+            <input type="range" id="sl-token" min="10000" max="1000000" step="10000" oninput="slVal('sv-token',this.value/1000,'k')">
+            <span class="setting-val" id="sv-token">100k</span>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">游戏速度</div>
+          <div class="setting-row">
+            <label>世界Tick间隔(s)</label>
+            <input type="range" id="sl-world-tick" min="1" max="10" step="0.5" oninput="slVal('sv-world-tick',this.value,'s')">
+            <span class="setting-val" id="sv-world-tick">3s</span>
           </div>
           <div class="setting-row">
-            <label>模型</label>
-            <select id="model-select" class="setting-input">
-              <option value="gemini-2.5-flash">gemini-2.5-flash（推荐）</option>
-              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-              <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-              <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-            </select>
-          </div>
-        </div>
-        <div id="local-settings" style="display:none">
-          <div class="setting-row">
-            <label>Base URL</label>
-            <input type="text" id="local-url-input" class="setting-input" placeholder="http://localhost:11434/v1">
+            <label>NPC最短思考(s)</label>
+            <input type="range" id="sl-npc-min" min="1" max="20" step="1" oninput="slVal('sv-npc-min',this.value,'s')">
+            <span class="setting-val" id="sv-npc-min">3s</span>
           </div>
           <div class="setting-row">
-            <label>模型名称</label>
-            <input type="text" id="local-model-input" class="setting-input" placeholder="llama3...">
+            <label>NPC最长思考(s)</label>
+            <input type="range" id="sl-npc-max" min="5" max="60" step="1" oninput="slVal('sv-npc-max',this.value,'s')">
+            <span class="setting-val" id="sv-npc-max">8s</span>
           </div>
         </div>
-      </div>
 
-      <!-- Token -->
-      <div class="panel-section">
-        <h3>📊 Token 限额</h3>
-        <div class="setting-row">
-          <label>会话 Token 上限 <span id="token-limit-display">200,000</span></label>
-          <input type="range" id="token-limit-slider" min="10000" max="1000000" step="10000" value="200000"
-                 oninput="document.getElementById('token-limit-display').textContent=formatNum(this.value)">
+        <div class="settings-group">
+          <div class="settings-group-title">NPC 参数</div>
+          <div class="setting-row">
+            <label>视野半径</label>
+            <input type="range" id="sl-vision" min="1" max="5" step="1" oninput="slVal('sv-vision',this.value,'')">
+            <span class="setting-val" id="sv-vision">2</span>
+          </div>
+          <div class="setting-row">
+            <label>社交半径</label>
+            <input type="range" id="sl-hearing" min="3" max="12" step="1" oninput="slVal('sv-hearing',this.value,'')">
+            <span class="setting-val" id="sv-hearing">6</span>
+          </div>
+          <div class="toggle-wrap">
+            <label style="font-size:12px;color:var(--muted);flex:1">显示NPC内心想法</label>
+            <button class="toggle" id="toggle-thoughts" onclick="this.classList.toggle('on')"></button>
+          </div>
+          <button class="btn-primary" style="width:100%;margin-top:6px" onclick="saveGameSettings()">💾 保存游戏设置</button>
         </div>
-      </div>
 
-      <!-- Player settings -->
-      <div class="panel-section">
-        <h3>🎮 玩家设置</h3>
-        <div class="setting-row">
-          <label>玩家名称</label>
-          <input type="text" id="player-name-input" class="setting-input" placeholder="玩家" maxlength="20">
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="show-thoughts-cb" checked onchange="onShowThoughtsChange()">
-          <label for="show-thoughts-cb">显示 NPC 内心想法</label>
-        </div>
-      </div>
-
-      <!-- World timing -->
-      <div class="panel-section">
-        <h3>⏱ 世界时钟</h3>
-        <div class="setting-row">
-          <label>世界 Tick 间隔（秒） <span id="s-tick-display">3.0</span></label>
-          <input type="range" id="s-tick" min="0.5" max="10" step="0.5" value="3.0"
-                 oninput="document.getElementById('s-tick-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>NPC 思考最短间隔（秒） <span id="s-npc-min-display">5.0</span></label>
-          <input type="range" id="s-npc-min" min="1" max="30" step="1" value="5"
-                 oninput="document.getElementById('s-npc-min-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>NPC 思考最长间隔（秒） <span id="s-npc-max-display">10.0</span></label>
-          <input type="range" id="s-npc-max" min="2" max="60" step="1" value="10"
-                 oninput="document.getElementById('s-npc-max-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>上帝思考间隔 最小/最大（秒） <span id="s-god-display">20/40</span></label>
-          <input type="range" id="s-god-min" min="5" max="120" step="5" value="20"
-                 oninput="updateGodDisplay()">
-          <input type="range" id="s-god-max" min="10" max="300" step="10" value="40"
-                 oninput="updateGodDisplay()" style="margin-top:4px">
+        <div class="danger-zone">
+          <div class="settings-group-title" style="color:var(--red);margin-bottom:8px">危险操作</div>
+          <button class="btn-red" style="width:100%;margin-bottom:8px" onclick="deleteAllSaves()">🗑 删除所有存档</button>
+          <button class="btn-ghost" style="width:100%" onclick="backToCover()">⌂ 返回封面</button>
         </div>
       </div>
-
-      <!-- Perception -->
-      <div class="panel-section">
-        <h3>👂 感知设置</h3>
-        <div class="setting-row">
-          <label>NPC 听觉半径（格） <span id="s-hear-display">5</span></label>
-          <input type="range" id="s-hear" min="1" max="15" step="1" value="5"
-                 oninput="document.getElementById('s-hear-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>NPC 视野半径（格，5×5=2） <span id="s-vision-display">2</span></label>
-          <input type="range" id="s-vision" min="1" max="5" step="1" value="2"
-                 oninput="document.getElementById('s-vision-display').textContent=this.value">
-        </div>
-      </div>
-
-      <!-- Energy & Economy -->
-      <div class="panel-section">
-        <h3>⚡ 能量 &amp; 经济</h3>
-        <div class="setting-row">
-          <label>食物回复体力 <span id="s-food-energy-display">30</span></label>
-          <input type="range" id="s-food-energy" min="5" max="100" step="5" value="30"
-                 oninput="document.getElementById('s-food-energy-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>睡眠回复体力 <span id="s-sleep-energy-display">50</span></label>
-          <input type="range" id="s-sleep-energy" min="10" max="100" step="5" value="50"
-                 oninput="document.getElementById('s-sleep-energy-display').textContent=this.value">
-        </div>
-        <hr class="section-divider">
-        <div style="font-size:10px;color:#888;margin-bottom:6px">交易所汇率（每个资源 = ? 金币）</div>
-        <div class="setting-row">
-          <label>木头汇率 <span id="s-wood-rate-display">1</span></label>
-          <input type="range" id="s-wood-rate" min="1" max="10" step="1" value="1"
-                 oninput="document.getElementById('s-wood-rate-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>石头汇率 <span id="s-stone-rate-display">2</span></label>
-          <input type="range" id="s-stone-rate" min="1" max="20" step="1" value="2"
-                 oninput="document.getElementById('s-stone-rate-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>矿石汇率 <span id="s-ore-rate-display">5</span></label>
-          <input type="range" id="s-ore-rate" min="1" max="30" step="1" value="5"
-                 oninput="document.getElementById('s-ore-rate-display').textContent=this.value">
-        </div>
-        <div class="setting-row">
-          <label>食物价格（金币/个） <span id="s-food-cost-display">3</span></label>
-          <input type="range" id="s-food-cost" min="1" max="20" step="1" value="3"
-                 oninput="document.getElementById('s-food-cost-display').textContent=this.value">
-        </div>
-      </div>
-
-      <!-- Save management -->
-      <div class="panel-section">
-        <h3>💾 存档管理</h3>
-        <div class="save-info" id="save-info-display">加载中...</div>
-        <div id="npc-memory-list"></div>
-        <div class="btn-group" style="margin-top:6px">
-          <button class="btn green" onclick="sendControl('save_game')">💾 立即保存</button>
-          <button class="btn red" onclick="deleteAllSaves()">🗑 删除全部存档</button>
-        </div>
-        <button class="btn" style="width:100%;margin-top:5px;font-size:10px" onclick="loadSaveInfo()">↻ 刷新存档信息</button>
-      </div>
-
-      <button class="btn active" style="width:100%;padding:8px;margin-top:4px" onclick="saveSettings()">💾 保存所有设置</button>
-      <div id="settings-msg" style="font-size:10px;color:#80ff80;text-align:center;margin-top:5px;display:none"></div>
     </div>
   </div>
-</div>
 
-<!-- Chat log -->
-<div id="chat-wrap">
-  <div id="chat-header">
-    💬 世界日志
-    <button id="chat-clear" onclick="clearChat()">清空</button>
-  </div>
-  <div id="chat-log"></div>
-</div>
-
-<!-- Trade Modal -->
-<div id="trade-modal">
-  <div id="trade-box">
-    <h3>🤝 发起交易</h3>
-    <div id="trade-target-name" style="font-size:11px;color:#a0c4ff;margin-bottom:10px"></div>
-    <div class="trade-row">
-      <label>我提供</label>
-      <select id="trade-offer-item">
-        <option value="wood">🌲 木头</option>
-        <option value="stone">🪨 石头</option>
-        <option value="ore">💎 矿石</option>
-        <option value="food">🌾 食物</option>
-        <option value="gold">🪙 金币</option>
-      </select>
-      <input type="number" id="trade-offer-qty" value="1" min="1" max="99" style="width:60px">
+  <!-- PLAYER BAR -->
+  <div id="player-bar">
+    <div class="player-stat">👤 <b id="pname">Player</b></div>
+    <div class="player-stat">❤️ <b id="penergy">100</b></div>
+    <div class="player-stat">📍 <b id="ppos">(9,9)</b></div>
+    <div class="dpad">
+      <div class="blank"></div>
+      <button onclick="playerMove(0,-1)" title="上 (W/↑)">▲</button>
+      <div class="blank"></div>
+      <button onclick="playerMove(-1,0)" title="左 (A/←)">◀</button>
+      <div class="blank"></div>
+      <button onclick="playerMove(1,0)" title="右 (D/→)">▶</button>
+      <div class="blank"></div>
+      <button onclick="playerMove(0,1)" title="下 (S/↓)">▼</button>
+      <div class="blank"></div>
     </div>
-    <div class="trade-row">
-      <label>请求</label>
-      <select id="trade-req-item">
-        <option value="food">🌾 食物</option>
-        <option value="wood">🌲 木头</option>
-        <option value="stone">🪨 石头</option>
-        <option value="ore">💎 矿石</option>
-        <option value="gold">🪙 金币</option>
-      </select>
-      <input type="number" id="trade-req-qty" value="1" min="1" max="99" style="width:60px">
-    </div>
-    <div class="trade-btns">
-      <button class="btn" onclick="closeTradeModal()">取消</button>
-      <button class="btn active" onclick="confirmTrade()">确认交易</button>
+    <button class="btn-ghost" style="font-size:12px" onclick="sendWS({type:'player_action',action:'gather'})">⛏ 采集</button>
+    <button class="btn-ghost" style="font-size:12px" onclick="sendWS({type:'player_action',action:'eat'})">🍎 吃</button>
+    <div class="talk-wrap">
+      <input id="player-talk-input" placeholder="说话…" onkeydown="if(event.key==='Enter')playerTalk()">
+      <button class="btn-ghost" style="font-size:12px" onclick="playerTalk()">发送</button>
     </div>
   </div>
-</div>
+
+  <!-- EVENT LOG -->
+  <div id="event-log-wrap">
+    <div class="event-log-header" onclick="toggleLog()">
+      <span>📜 事件日志</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="log-toggle-lbl" style="font-size:11px;color:var(--muted)">▲ 折叠</span>
+        <button class="btn-ghost" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();clearLog()">清空</button>
+      </div>
+    </div>
+    <div id="event-log"></div>
+  </div>
+
+</div><!-- /game-screen -->
 
 <script>
-// ── Constants ─────────────────────────────────────────────────────────────
-const TILE_SIZE = 30;
-const COLS = 20, ROWS = 20;
+// ════════ STATE ════════
+const S = {
+  world: null,
+  simRunning: false,
+  activeTab: 'npc',
+  spawnTarget: null,
+  tradeLog: [],
+  logOpen: true,
+  provider: 'gemini',
+  activePalette: 'grass',
+  profileCache: {},
+};
 
-// ── State ──────────────────────────────────────────────────────────────────
-let worldState = null;
-let ws = null;
-let wsConnected = false;
-let spawnType = null;
-let spawnPos = null;
-let rainDrops = [];
-let simulationRunning = false;
-let keysDown = {};
-let playerMoveInterval = null;
-let tradeTargetId = null;
-let selectedNpcId = null;
-
-// ── Canvas setup ───────────────────────────────────────────────────────────
-const canvas = document.getElementById('world-canvas');
-const ctx = canvas.getContext('2d');
-
-const TILE_COLORS = { g:'#4a8e2a', w:'#3060a0', r:'#6a6a6a', f:'#235a28', o:'#8a6830' };
-const RESOURCE_ICONS = { w:'🌲', s:'🪨', o:'💎', f:'🌾' };
-const WEATHER_LABELS = { sunny:'☀ 晴天', rainy:'🌧 雨天', storm:'⛈ 暴风' };
-const ITEM_ICONS = { wood:'🌲', stone:'🪨', ore:'💎', food:'🌾', gold:'🪙' };
-
-// ── WebSocket ──────────────────────────────────────────────────────────────
-function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
-  ws.onopen = () => {
-    wsConnected = true;
-    document.getElementById('ws-status').classList.add('connected');
-    addChat('system', '已连接到服务器');
-  };
-  ws.onmessage = e => {
-    try {
-      const msg = JSON.parse(e.data);
-      if (msg.type === 'world_state') onWorldState(msg);
-    } catch {}
-  };
-  ws.onclose = () => {
-    wsConnected = false;
-    document.getElementById('ws-status').classList.remove('connected');
-    addChat('system', '连接断开，3秒后重连...');
-    setTimeout(connectWS, 3000);
-  };
-  ws.onerror = () => ws.close();
-}
-
-function sendMsg(data) {
-  if (ws && wsConnected) ws.send(JSON.stringify(data));
-}
-
-// ── Player actions ─────────────────────────────────────────────────────────
-function playerAction(action) {
-  sendMsg({ type: 'player_action', ...action });
-}
-
-function sendPlayerChat() {
-  const msg = document.getElementById('player-chat-input').value.trim();
-  if (!msg) return;
-  const target = document.getElementById('player-target-select').value;
-  playerAction({ action: 'talk', message: msg, target_id: target || null });
-  document.getElementById('player-chat-input').value = '';
-}
-
-// WASD keyboard controls
-document.addEventListener('keydown', e => {
-  // Don't capture keys in input fields
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const key = e.key.toLowerCase();
-
-  if (['w','a','s','d'].includes(key)) {
-    e.preventDefault();
-    if (!keysDown[key]) {
-      keysDown[key] = true;
-      const moves = { w:{dx:0,dy:-1}, s:{dx:0,dy:1}, a:{dx:-1,dy:0}, d:{dx:1,dy:0} };
-      playerAction({ action: 'move', ...moves[key] });
-    }
-  } else if (key === 'g') {
-    e.preventDefault();
-    playerAction({ action: 'gather' });
-  } else if (key === 'e') {
-    e.preventDefault();
-    playerAction({ action: 'eat' });
-  }
-});
-
-document.addEventListener('keyup', e => {
-  keysDown[e.key.toLowerCase()] = false;
-});
-
-// ── World state handler ────────────────────────────────────────────────────
-function onWorldState(msg) {
-  worldState = msg;
-
-  // Topbar
-  document.getElementById('tick-val').textContent = msg.tick;
-  document.getElementById('time-val').textContent = msg.time.time_str;
-  document.getElementById('weather-val').textContent = WEATHER_LABELS[msg.weather] || msg.weather;
-
-  // Simulation state
-  const wasRunning = simulationRunning;
-  simulationRunning = msg.simulation_running;
-  const simBtn = document.getElementById('sim-btn');
-  const stoppedOv = document.getElementById('stopped-overlay');
-  if (simulationRunning) {
-    simBtn.textContent = '⏹ 停止模拟';
-    simBtn.classList.add('running');
-    stoppedOv.style.display = 'none';
-  } else {
-    simBtn.textContent = '▶ 启动模拟';
-    simBtn.classList.remove('running');
-    stoppedOv.style.display = 'flex';
-  }
-
-  // Token bar
-  const u = msg.token_usage;
-  if (u) {
-    const pct = Math.min(100, u.usage_pct || 0);
-    const fill = document.getElementById('token-fill');
-    fill.style.width = pct + '%';
-    fill.className = pct > 80 ? 'danger' : '';
-    document.getElementById('token-text').textContent =
-      `${fmtK(u.total_tokens_used)}/${fmtK(u.limit)}`;
-    const ov = document.getElementById('paused-overlay');
-    if (u.paused && simulationRunning) ov.classList.add('show');
-    else ov.classList.remove('show');
-  }
-
-  // God commentary
-  if (msg.god && msg.god.commentary) {
-    document.getElementById('god-commentary').textContent = msg.god.commentary;
-  }
-
-  // Events → chat
-  for (const evt of (msg.events || [])) handleEvent(evt, msg.time);
-
-  // NPC list
-  renderNPCList(msg.npcs, msg.tick);
-
-  // Player panel
-  if (msg.player) updatePlayerPanel(msg.player);
-
-  // Sync settings from server
-  if (msg.settings) syncSettingsFromServer(msg.settings);
-}
-
-function handleEvent(evt, time) {
-  const t = `[${time.time_str}]`;
-  switch (evt.type) {
-    case 'npc_spoke':
-      addChat('talk', `${t} ${evt.actor}: "${evt.message}"`); break;
-    case 'npc_gathered':
-      addChat('gather', `${t} ${evt.actor} 采集了 ${evt.amount} ${ITEM_ICONS[evt.resource]||evt.resource}`); break;
-    case 'npc_traded':
-      addChat('trade', `${t} ${evt.actor} 与 ${evt.with||'?'} 交易`); break;
-    case 'npc_exchanged':
-      addChat('exchange', `${t} ${evt.actor} 在交易所换得 ${evt.gold}金`); break;
-    case 'npc_bought_food':
-      addChat('exchange', `${t} ${evt.actor} 购买了 ${evt.qty} 食物`); break;
-    case 'npc_ate':
-      addChat('eat', `${t} ${evt.actor} 吃食物`); break;
-    case 'npc_slept':
-      addChat('sleep', `${t} ${evt.actor} 睡觉`); break;
-    case 'player_spoke':
-      addChat('player', `${t} [玩家] ${evt.name||evt.actor}: "${evt.message}"`); break;
-    case 'player_gathered':
-      addChat('player', `${t} [玩家] 采集了 ${evt.amount} ${ITEM_ICONS[evt.resource]||evt.resource}`); break;
-    case 'player_traded':
-      addChat('player', `${t} [玩家] 与 ${evt.with||'?'} 交易`); break;
-    case 'weather_changed':
-      addChat('weather', `${t} 天气变为 ${WEATHER_LABELS[evt.weather]||evt.weather}`);
-      if (evt.commentary) addChat('god', `神明: "${evt.commentary}"`);
-      break;
-    case 'resource_spawned':
-      addChat('weather', `${t} 上帝在(${evt.x},${evt.y})刷新了${evt.resource_type}`);
-      if (evt.commentary) addChat('god', `神明: "${evt.commentary}"`);
-      break;
-  }
-}
-
-// ── Player panel ───────────────────────────────────────────────────────────
-function updatePlayerPanel(player) {
-  document.getElementById('p-pos').textContent = `(${player.x},${player.y})`;
-  const ep = player.energy;
-  document.getElementById('p-energy').textContent = ep;
-  document.getElementById('p-energy').style.color = ep > 60 ? '#4caf50' : ep > 30 ? '#ff9800' : '#f44336';
-  document.getElementById('p-energy-fill').style.width = ep + '%';
-  document.getElementById('p-energy-fill').style.background = ep > 60 ? '#4caf50' : ep > 30 ? '#ff9800' : '#f44336';
-
-  // God mode badge
-  document.getElementById('player-god-badge').style.display = player.is_god_mode ? '' : 'none';
-
-  // Inventory
-  const inv = player.inventory;
-  const chips = [];
-  if (inv.wood) chips.push(`<span class="inv-chip">🌲${inv.wood}</span>`);
-  if (inv.stone) chips.push(`<span class="inv-chip">🪨${inv.stone}</span>`);
-  if (inv.ore) chips.push(`<span class="inv-chip">💎${inv.ore}</span>`);
-  if (inv.food) chips.push(`<span class="inv-chip food">🌾${inv.food}</span>`);
-  if (inv.gold) chips.push(`<span class="inv-chip gold">🪙${inv.gold}</span>`);
-  document.getElementById('player-inv').innerHTML = chips.join('') || '<span style="color:#555;font-size:10px">背包为空</span>';
-
-  // Inbox
-  const inbox = player.inbox || [];
-  const inboxDiv = document.getElementById('player-inbox');
-  if (inbox.length > 0) {
-    inboxDiv.innerHTML = inbox.map(m => `<div>${m}</div>`).join('');
-  } else {
-    inboxDiv.innerHTML = '<span style="color:#555">暂无消息</span>';
-  }
-
-  // Update NPC target selector
-  if (worldState && worldState.npcs) {
-    const sel = document.getElementById('player-target-select');
-    const curVal = sel.value;
-    sel.innerHTML = '<option value="">广播（所有人）</option>';
-    for (const npc of worldState.npcs) {
-      const opt = document.createElement('option');
-      opt.value = npc.id;
-      opt.textContent = npc.name;
-      sel.appendChild(opt);
-    }
-    sel.value = curVal;
-
-    // Trade buttons for nearby NPCs
-    const tradeDiv = document.getElementById('trade-npc-btns');
-    tradeDiv.innerHTML = '';
-    for (const npc of worldState.npcs) {
-      const dist = Math.abs(npc.x - player.x) + Math.abs(npc.y - player.y);
-      if (dist <= 2) {
-        const btn = document.createElement('button');
-        btn.className = 'btn';
-        btn.style.borderColor = npc.color;
-        btn.style.color = npc.color;
-        btn.textContent = `与 ${npc.name} 交易`;
-        btn.onclick = () => openTradeModal(npc.id, npc.name);
-        tradeDiv.appendChild(btn);
+// ════════ COVER PARTICLES ════════
+(function(){
+  const canvas = document.getElementById('cover-canvas');
+  const ctx = canvas.getContext('2d');
+  let pts = [];
+  function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; }
+  resize(); window.addEventListener('resize',resize);
+  for(let i=0;i<90;i++) pts.push({x:Math.random(),y:Math.random(),vx:(Math.random()-.5)*.00015,vy:(Math.random()-.5)*.00015,r:Math.random()*2+.5,a:Math.random()*.7+.1});
+  function tick(){
+    const coverVisible = document.getElementById('cover-screen').style.display !== 'none'
+      && !document.getElementById('cover-screen').classList.contains('hidden');
+    if(coverVisible || document.getElementById('cover-screen').offsetParent !== null){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      pts.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy;
+        if(p.x<0)p.x=1; if(p.x>1)p.x=0;
+        if(p.y<0)p.y=1; if(p.y>1)p.y=0;
+        ctx.beginPath();
+        ctx.arc(p.x*canvas.width,p.y*canvas.height,p.r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(78,204,163,${p.a*.5})`;
+        ctx.fill();
+      });
+      // Draw lines between close pts
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+        const dx=(pts[i].x-pts[j].x)*canvas.width, dy=(pts[i].y-pts[j].y)*canvas.height;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d<80){
+          ctx.beginPath();
+          ctx.moveTo(pts[i].x*canvas.width,pts[i].y*canvas.height);
+          ctx.lineTo(pts[j].x*canvas.width,pts[j].y*canvas.height);
+          ctx.strokeStyle=`rgba(78,204,163,${(.8-d/80)*.15})`;
+          ctx.lineWidth=.5; ctx.stroke();
+        }
       }
     }
-    if (!tradeDiv.innerHTML) {
-      tradeDiv.innerHTML = '<span style="color:#555;font-size:10px">靠近 NPC 才能交易（2格内）</span>';
-    }
+    requestAnimationFrame(tick);
   }
-}
-
-// ── Trade modal ────────────────────────────────────────────────────────────
-function openTradeModal(npcId, npcName) {
-  tradeTargetId = npcId;
-  document.getElementById('trade-target-name').textContent = `与 ${npcName} 交易`;
-  document.getElementById('trade-modal').classList.add('show');
-}
-
-function closeTradeModal() {
-  document.getElementById('trade-modal').classList.remove('show');
-  tradeTargetId = null;
-}
-
-function confirmTrade() {
-  if (!tradeTargetId) return;
-  playerAction({
-    action: 'trade',
-    target_id: tradeTargetId,
-    offer_item: document.getElementById('trade-offer-item').value,
-    offer_qty: parseInt(document.getElementById('trade-offer-qty').value) || 1,
-    request_item: document.getElementById('trade-req-item').value,
-    request_qty: parseInt(document.getElementById('trade-req-qty').value) || 1,
-  });
-  closeTradeModal();
-}
-
-// Close modal on backdrop click
-document.getElementById('trade-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeTradeModal();
-});
-
-// ── NPC list ───────────────────────────────────────────────────────────────
-function renderNPCList(npcs, tick) {
-  if (!npcs) return;
-  const c = document.getElementById('npc-list');
-  c.innerHTML = '';
-  for (const npc of npcs) {
-    const energyColor = npc.energy > 60 ? '#4caf50' : npc.energy > 30 ? '#ff9800' : '#f44336';
-    const inv = npc.inventory;
-    const items = [];
-    if (inv.wood) items.push(`<span class="inv-chip">🌲${inv.wood}</span>`);
-    if (inv.stone) items.push(`<span class="inv-chip">🪨${inv.stone}</span>`);
-    if (inv.ore) items.push(`<span class="inv-chip">💎${inv.ore}</span>`);
-    if (inv.food) items.push(`<span class="inv-chip food">🌾${inv.food}</span>`);
-    if (inv.gold) items.push(`<span class="inv-chip gold">🪙${inv.gold}</span>`);
-    const msgAge = tick - npc.last_message_tick;
-    const msgHtml = (npc.last_message && msgAge < 12)
-      ? `<div class="npc-message">"${npc.last_message.substring(0,80)}"</div>` : '';
-    const thoughtHtml = npc.thought
-      ? `<div class="npc-thought">💭 ${npc.thought.substring(0,80)}</div>` : '';
-
-    const card = document.createElement('div');
-    card.className = 'npc-card' + (npc.id === selectedNpcId ? ' selected' : '');
-    card.innerHTML = `
-      <div class="npc-header">
-        <div class="npc-dot" style="background:${npc.color};box-shadow:0 0 4px ${npc.color}40"></div>
-        <div class="npc-name">${npc.name}</div>
-        <div class="npc-pos">(${npc.x},${npc.y})</div>
-        <div class="npc-action-badge ${npc.last_action}">${npc.is_processing ? '🔄' : npc.last_action}</div>
-      </div>
-      <div class="energy-bar"><div class="energy-fill" style="width:${npc.energy}%;background:${energyColor}"></div></div>
-      <div style="font-size:10px;color:#666;margin-bottom:3px">⚡ ${npc.energy}/100</div>
-      <div class="inv-chips">${items.join('')}</div>
-      ${msgHtml}
-      ${thoughtHtml}
-      <div class="npc-chat-btns">
-        <button class="btn" style="font-size:10px;padding:2px 8px" onclick="quickChatNpc('${npc.id}')">💬 对话</button>
-      </div>
-    `;
-    card.addEventListener('click', () => { selectedNpcId = npc.id; });
-    c.appendChild(card);
-  }
-}
-
-function quickChatNpc(npcId) {
-  showTab('player');
-  document.getElementById('player-target-select').value = npcId;
-  document.getElementById('player-chat-input').focus();
-}
-
-// ── Canvas rendering ───────────────────────────────────────────────────────
-function render(state) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const t of state.tiles) drawTile(t);
-  // Draw player (below NPC names)
-  if (state.player) drawPlayer(state.player);
-  for (const npc of state.npcs) drawNPC(npc, state.tick);
-  drawWeather(state.weather);
-}
-
-function drawTile(t) {
-  const x = t.x * TILE_SIZE, y = t.y * TILE_SIZE;
-
-  // Spawn selection highlight
-  if (spawnPos && spawnPos.x === t.x && spawnPos.y === t.y) {
-    ctx.fillStyle = '#ffffff99';
-    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-  }
-
-  ctx.fillStyle = TILE_COLORS[t.t] || '#4a8e2a';
-  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5;
-  ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
-
-  // Exchange
-  if (t.e) {
-    ctx.fillStyle = '#b8960a';
-    ctx.fillRect(x+3, y+3, TILE_SIZE-6, TILE_SIZE-6);
-    ctx.font = '13px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🏛', x + TILE_SIZE/2, y + TILE_SIZE/2);
-    return;
-  }
-
-  // Town texture
-  if (t.t === 'o') {
-    ctx.fillStyle = 'rgba(255,220,100,0.07)';
-    ctx.fillRect(x+1, y+1, TILE_SIZE/2-2, TILE_SIZE/2-2);
-    ctx.fillRect(x+TILE_SIZE/2+1, y+TILE_SIZE/2+1, TILE_SIZE/2-2, TILE_SIZE/2-2);
-    return;
-  }
-
-  // Resource icon
-  if (t.r && t.q > 0) {
-    const icon = RESOURCE_ICONS[t.r] || '';
-    if (icon) {
-      ctx.font = '13px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(icon, x + TILE_SIZE/2, y + TILE_SIZE/2);
-      const frac = t.q / (t.mq || 5);
-      const dots = Math.ceil(frac * 3);
-      ctx.fillStyle = `rgba(255,255,255,${0.3 + frac*0.4})`;
-      for (let i = 0; i < dots; i++) ctx.fillRect(x+4+i*5, y+TILE_SIZE-5, 3, 3);
-    }
-  }
-}
-
-function drawPlayer(player) {
-  const cx = player.x * TILE_SIZE + TILE_SIZE/2;
-  const cy = player.y * TILE_SIZE + TILE_SIZE/2;
-  const r = 10;
-
-  // God mode glow
-  if (player.is_god_mode) {
-    ctx.shadowColor = '#c080ff';
-    ctx.shadowBlur = 12;
-  }
-
-  // Body
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = player.is_god_mode ? '#c080ff' : '#ffffff';
-  ctx.fill();
-  ctx.strokeStyle = player.is_god_mode ? '#ff80ff' : '#a0e0c0';
-  ctx.lineWidth = 2; ctx.stroke();
-
-  ctx.shadowBlur = 0;
-
-  // Label
-  ctx.fillStyle = player.is_god_mode ? '#c080ff' : '#a0e0a0';
-  ctx.font = 'bold 9px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(player.is_god_mode ? '⚡' : 'P', cx, cy);
-
-  // Name
-  ctx.font = '8px sans-serif';
-  const name = player.name || '玩家';
-  const nw = ctx.measureText(name).width + 6;
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(cx - nw/2, cy + r + 1, nw, 11);
-  ctx.fillStyle = player.is_god_mode ? '#c080ff' : '#a0e0a0';
-  ctx.textAlign = 'center';
-  ctx.fillText(name, cx, cy + r + 7);
-}
-
-function drawNPC(npc, tick) {
-  const cx = npc.x * TILE_SIZE + TILE_SIZE/2;
-  const cy = npc.y * TILE_SIZE + TILE_SIZE/2;
-  const r = 9;
-
-  // Processing ring
-  if (npc.is_processing) {
-    const angle = (Date.now() / 400) % (Math.PI * 2);
-    ctx.save();
-    ctx.strokeStyle = npc.color; ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 3]); ctx.lineDashOffset = -(angle * 8);
-    ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]); ctx.restore();
-  }
-
-  // Energy arc
-  const ef = npc.energy / 100;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r + 2, -Math.PI/2, -Math.PI/2 + ef * Math.PI * 2);
-  ctx.strokeStyle = ef > 0.6 ? '#4caf50' : ef > 0.3 ? '#ff9800' : '#f44336';
-  ctx.lineWidth = 2; ctx.stroke();
-
-  // Body
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = npc.color; ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
-
-  // Letter
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 9px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(npc.name[0], cx, cy);
-
-  // Name label
-  ctx.font = '8px sans-serif';
-  const nw = ctx.measureText(npc.name).width + 6;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(cx - nw/2, cy + r + 1, nw, 11);
-  ctx.fillStyle = '#ddd'; ctx.textAlign = 'center';
-  ctx.fillText(npc.name, cx, cy + r + 7);
-
-  // Speech bubble
-  const age = tick - npc.last_message_tick;
-  if (npc.last_message && age < 8) {
-    const alpha = Math.max(0, 1 - age / 8);
-    const msg = npc.last_message.substring(0, 22) + (npc.last_message.length > 22 ? '…' : '');
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = '8px sans-serif';
-    const mw = Math.min(ctx.measureText(msg).width + 10, 130);
-    let bx = cx - mw/2, by = cy - r - 24;
-    bx = Math.max(2, Math.min(bx, canvas.width - mw - 2));
-    by = Math.max(2, by);
-    ctx.fillStyle = 'rgba(15,25,50,0.92)';
-    rrect(ctx, bx, by, mw, 14, 3); ctx.fill();
-    ctx.strokeStyle = npc.color; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#cce8ff'; ctx.textAlign = 'left';
-    ctx.fillText(msg, bx + 5, by + 9);
-    ctx.restore();
-  }
-}
-
-function rrect(c, x, y, w, h, r) {
-  c.beginPath();
-  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.arcTo(x+w,y,x+w,y+r,r);
-  c.lineTo(x+w,y+h-r); c.arcTo(x+w,y+h,x+w-r,y+h,r);
-  c.lineTo(x+r,y+h); c.arcTo(x,y+h,x,y+h-r,r);
-  c.lineTo(x,y+r); c.arcTo(x,y,x+r,y,r);
-  c.closePath();
-}
-
-function initRain(count) {
-  rainDrops = Array.from({length: count}, () => ({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    speed: 2 + Math.random() * 3,
-    len: 6 + Math.random() * 8,
-  }));
-}
-
-function drawWeather(weather) {
-  if (weather === 'rainy' || weather === 'storm') {
-    const cnt = weather === 'storm' ? 120 : 60;
-    if (rainDrops.length !== cnt) initRain(cnt);
-    ctx.strokeStyle = weather === 'storm'
-      ? 'rgba(150,200,255,0.55)' : 'rgba(150,200,255,0.3)';
-    ctx.lineWidth = 1;
-    for (const d of rainDrops) {
-      ctx.beginPath(); ctx.moveTo(d.x, d.y);
-      ctx.lineTo(d.x - d.len*0.3, d.y + d.len); ctx.stroke();
-      d.x -= d.speed * 0.3; d.y += d.speed;
-      if (d.y > canvas.height) { d.y = -10; d.x = Math.random() * canvas.width; }
-      if (d.x < 0) d.x = canvas.width;
-    }
-    if (weather === 'storm') {
-      ctx.fillStyle = 'rgba(20,0,50,0.12)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      if (Math.random() < 0.008) {
-        ctx.fillStyle = 'rgba(200,220,255,0.25)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-    }
-  } else {
-    rainDrops = [];
-  }
-}
-
-// Animation loop
-(function loop() {
-  if (worldState) render(worldState);
-  requestAnimationFrame(loop);
+  tick();
 })();
 
-// ── Canvas interaction ─────────────────────────────────────────────────────
-canvas.addEventListener('click', e => {
-  const rect = canvas.getBoundingClientRect();
-  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-  const tx = Math.floor((e.clientX - rect.left) * sx / TILE_SIZE);
-  const ty = Math.floor((e.clientY - rect.top)  * sy / TILE_SIZE);
-
-  // Spawn mode
-  if (spawnType) {
-    spawnPos = { x: tx, y: ty };
-    document.getElementById('spawn-pos').textContent = `(${tx}, ${ty})`;
-    document.getElementById('spawn-confirm-wrap').style.display = 'inline';
-    return;
+// ════════ MAP EDITOR ════════
+const ED = 20, TSIZE = 20;
+const TILE_COLORS = {grass:'#3d7a24',rock:'#555',forest:'#1e5c2c',town:'#8b6914',water:'#1565c0'};
+const edTiles = Array.from({length:ED},(_,y)=>Array.from({length:ED},(_,x)=>{
+  if(y>=9&&y<12&&x>=9&&x<12) return 'town';
+  return 'grass';
+}));
+// Add some default forest
+[[2,8],[5,3],[12,2],[17,8],[3,12],[15,15]].forEach(([cx,cy])=>{
+  for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+    if(dx*dx+dy*dy<=4){ const nx=cx+dx,ny=cy+dy; if(nx>=0&&nx<ED&&ny>=0&&ny<ED&&edTiles[ny][nx]==='grass') edTiles[ny][nx]='forest'; }
+  }
+});
+// Add rock clusters
+[[3,3],[16,3],[3,16],[16,16]].forEach(([cx,cy])=>{
+  for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+    if(dx*dx+dy*dy<=3){ const nx=cx+dx,ny=cy+dy; if(nx>=0&&nx<ED&&ny>=0&&ny<ED&&edTiles[ny][nx]==='grass') edTiles[ny][nx]='rock'; }
   }
 });
 
-canvas.addEventListener('mousemove', e => {
-  if (!worldState) return;
-  const rect = canvas.getBoundingClientRect();
-  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-  const tx = Math.floor((e.clientX - rect.left) * sx / TILE_SIZE);
-  const ty = Math.floor((e.clientY - rect.top)  * sy / TILE_SIZE);
-  const tile = worldState.tiles.find(t => t.x === tx && t.y === ty);
-  if (tile) {
-    let info = `(${tx},${ty}) ${tile.t}`;
-    if (tile.r) info += ` ${RESOURCE_ICONS[tile.r]||tile.r}×${tile.q}`;
-    if (tile.e) info += ' 🏛交易所';
-    if (tile.p) info += ' [玩家]';
-    document.getElementById('canvas-overlay').textContent = info;
+let edCtx, edDrag=false;
+function initEditor(){
+  const canvas = document.getElementById('map-editor-canvas');
+  if(!canvas||canvas._init) return;
+  canvas._init=true;
+  edCtx=canvas.getContext('2d');
+  drawEditor();
+  function paint(e){
+    const r=canvas.getBoundingClientRect();
+    const cs=400/ED;
+    const tx=Math.floor((e.clientX-r.left)/cs);
+    const ty=Math.floor((e.clientY-r.top)/cs);
+    if(tx>=0&&tx<ED&&ty>=0&&ty<ED){ edTiles[ty][tx]=S.activePalette; drawEditor(); }
   }
-});
-
-// ── Simulation control ─────────────────────────────────────────────────────
-function toggleSimulation() {
-  if (simulationRunning) {
-    sendControl('stop_simulation');
-  } else {
-    startSimulation();
+  canvas.addEventListener('mousedown',e=>{edDrag=true;paint(e);});
+  canvas.addEventListener('mousemove',e=>{if(edDrag)paint(e);});
+  window.addEventListener('mouseup',()=>edDrag=false);
+}
+function drawEditor(){
+  if(!edCtx) return;
+  const cs=400/ED;
+  for(let y=0;y<ED;y++) for(let x=0;x<ED;x++){
+    edCtx.fillStyle=TILE_COLORS[edTiles[y][x]]||'#3d7a24';
+    edCtx.fillRect(x*cs,y*cs,cs-1,cs-1);
   }
+  // Exchange marker at 10,10
+  const ex=10*cs,ey=10*cs;
+  edCtx.fillStyle='rgba(245,166,35,.8)';
+  edCtx.fillRect(ex+1,ey+1,cs-3,cs-3);
+  edCtx.fillStyle='#000';
+  edCtx.font=`bold ${cs*0.5}px sans-serif`;
+  edCtx.textAlign='center'; edCtx.textBaseline='middle';
+  edCtx.fillText('E',ex+cs/2,ey+cs/2);
 }
-
-function startSimulation() {
-  sendControl('start_simulation');
-}
-
-// ── God controls ───────────────────────────────────────────────────────────
-function setWeather(w) {
-  sendMsg({ type:'god_command', command:'set_weather', value:w });
-}
-
-function selectSpawn(type, btn) {
-  spawnType = type; spawnPos = null;
-  document.getElementById('spawn-pos').textContent = '点击地图选择';
-  document.getElementById('spawn-confirm-wrap').style.display = 'none';
-  document.querySelectorAll('#spawn-btns .btn').forEach(b => b.classList.remove('active'));
+function selectPalette(btn,tile){
+  document.querySelectorAll('.palette-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  S.activePalette=tile;
+}
+function randomSeed(){ document.getElementById('seed-input').value=Math.floor(Math.random()*99999); }
+
+// ════════ NAVIGATION ════════
+function showCover(){ document.getElementById('cover-screen').style.cssText=''; document.getElementById('game-screen').classList.remove('visible'); }
+function hideCover(){ document.getElementById('cover-screen').style.display='none'; document.getElementById('game-screen').classList.add('visible'); }
+function quickStart(){ hideCover(); if(!S.simRunning) sendWS({type:'control',command:'start_simulation'}); }
+function openNewGameModal(){
+  document.getElementById('new-game-modal').classList.add('open');
+  setTimeout(initEditor,80);
+  fetchProfiles();
+}
+function openLoadModal(){ document.getElementById('load-modal').classList.add('open'); fetchSaves(); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function backToCover(){ if(S.simRunning) sendWS({type:'control',command:'stop_simulation'}); showCover(); }
+function startGame(){ closeModal('new-game-modal'); hideCover(); if(!S.simRunning) sendWS({type:'control',command:'start_simulation'}); }
+function switchNewTab(tab,idx){
+  document.querySelectorAll('#new-game-modal .modal-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.querySelectorAll('#new-game-modal .modal-body').forEach((b,i)=>b.classList.toggle('active',i===idx));
 }
 
-function confirmSpawn() {
-  if (!spawnType || !spawnPos) return;
-  sendMsg({ type:'god_command', command:'spawn_resource',
-            resource_type:spawnType, x:spawnPos.x, y:spawnPos.y, quantity:5 });
-  spawnType = null; spawnPos = null;
-  document.getElementById('spawn-pos').textContent = '未选择';
-  document.getElementById('spawn-confirm-wrap').style.display = 'none';
-  document.querySelectorAll('#spawn-btns .btn').forEach(b => b.classList.remove('active'));
+// ════════ WEBSOCKET ════════
+let ws, wsRetry=0;
+function connectWS(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen=()=>{ wsRetry=0; };
+  ws.onmessage=e=>{ try{ handleMsg(JSON.parse(e.data)); }catch(err){} };
+  ws.onclose=()=>{ wsRetry++; setTimeout(connectWS,Math.min(wsRetry*1500,10000)); };
+}
+function sendWS(obj){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)); }
+
+// ════════ MESSAGE HANDLER ════════
+function handleMsg(msg){
+  if(msg.type!=='world_state') return;
+  S.world=msg; S.simRunning=msg.simulation_running;
+  updateHeader(msg);
+  renderCanvas();
+  if(S.activeTab==='npc') renderNPCs(msg.npcs);
+  if(S.activeTab==='eco') updateEconomy(msg.market);
+  if(S.activeTab==='ctrl') updateControls(msg);
+  updatePlayerBar(msg.player);
+  processEvents(msg.events||[]);
+  syncSettings(msg.settings);
+  updateSimBtns();
 }
 
-function sendControl(cmd, value) {
-  const msg = { type: 'control', command: cmd };
-  if (value !== undefined) msg.value = value;
-  sendMsg(msg);
-}
-
-function applyNewLimit() {
-  const v = parseInt(document.getElementById('new-limit-input').value);
-  if (v > 0) {
-    sendControl('set_limit', v);
-    sendControl('resume');
+// ════════ HEADER ════════
+const WICONS={sunny:'☀️',rainy:'🌧️',storm:'⛈️'};
+const PHASE={dawn:'晨',day:'日',dusk:'昏',night:'夜'};
+function updateHeader(msg){
+  const t=msg.time;
+  document.getElementById('header-time').textContent=`${t.time_str} · ${PHASE[t.phase]||t.phase}`;
+  document.getElementById('header-weather').textContent=WICONS[msg.weather]||'☁️';
+  const tu=msg.token_usage;
+  if(tu){
+    const used=tu.total_used||0,limit=tu.session_limit||100000;
+    document.getElementById('token-label').textContent=`${fmtN(used)} / ${fmtN(limit)} tokens`;
+    const pct=Math.min(100,used/limit*100);
+    const f=document.getElementById('token-fill');
+    f.style.width=pct+'%';
+    f.className='progress-fill'+(pct>80?' danger':pct>60?' warn':'');
   }
 }
-
-// ── NPC thoughts toggle ────────────────────────────────────────────────────
-function onShowThoughtsChange() {
-  const val = document.getElementById('show-thoughts-cb').checked;
-  sendMsg({ type: 'control', command: 'set_show_thoughts', value: val });
+function updateSimBtns(){
+  const lbl=S.simRunning?'⏸ 暂停':'▶ 开始';
+  document.getElementById('btn-sim').textContent=lbl;
+  const b2=document.getElementById('btn-sim2');
+  if(b2) b2.textContent=S.simRunning?'⏸ 暂停仿真':'▶ 开始仿真';
 }
+function toggleSim(){ sendWS({type:'control',command:S.simRunning?'stop_simulation':'start_simulation'}); }
+function fmtN(n){ if(n>=1e6) return (n/1e6).toFixed(1)+'M'; if(n>=1000) return Math.round(n/1000)+'k'; return String(n); }
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['player','god','npcs','settings'];
-function showTab(name) {
-  document.querySelectorAll('.tab-btn').forEach((b, i) =>
-    b.classList.toggle('active', TAB_NAMES[i] === name));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.getElementById(`tab-${name}`).classList.add('active');
-  if (name === 'settings') { loadSettings(); loadSaveInfo(); }
-}
-
-// ── Settings ───────────────────────────────────────────────────────────────
-let currentProvider = 'gemini';
-
-function selectProvider(p) {
-  currentProvider = p;
-  document.getElementById('provider-gemini').classList.toggle('active', p === 'gemini');
-  document.getElementById('provider-local').classList.toggle('active', p === 'local');
-  document.getElementById('gemini-settings').style.display = p === 'gemini' ? '' : 'none';
-  document.getElementById('local-settings').style.display = p === 'local' ? '' : 'none';
-}
-
-function syncSettingsFromServer(s) {
-  // Sync sliders silently from server broadcast
-  setSliderSilent('s-tick', s.world_tick_seconds, 's-tick-display');
-  setSliderSilent('s-npc-min', s.npc_min_think, 's-npc-min-display');
-  setSliderSilent('s-npc-max', s.npc_max_think, 's-npc-max-display');
-  setSliderSilent('s-hear', s.npc_hearing_radius, 's-hear-display');
-  setSliderSilent('s-vision', s.npc_vision_radius, 's-vision-display');
-  setSliderSilent('s-food-energy', s.food_energy_restore, 's-food-energy-display');
-  setSliderSilent('s-sleep-energy', s.sleep_energy_restore, 's-sleep-energy-display');
-  setSliderSilent('s-wood-rate', s.exchange_rate_wood, 's-wood-rate-display');
-  setSliderSilent('s-stone-rate', s.exchange_rate_stone, 's-stone-rate-display');
-  setSliderSilent('s-ore-rate', s.exchange_rate_ore, 's-ore-rate-display');
-  setSliderSilent('s-food-cost', s.food_cost_gold, 's-food-cost-display');
-
-  const cb = document.getElementById('show-thoughts-cb');
-  if (cb && cb.checked !== s.show_npc_thoughts) cb.checked = s.show_npc_thoughts;
-
-  updateGodDisplay();
-}
-
-function setSliderSilent(sliderId, val, displayId) {
-  if (val === undefined) return;
-  const sl = document.getElementById(sliderId);
-  const dp = document.getElementById(displayId);
-  if (sl && Math.abs(parseFloat(sl.value) - val) > 0.01) sl.value = val;
-  if (dp) dp.textContent = val;
-}
-
-function updateGodDisplay() {
-  const min = document.getElementById('s-god-min').value;
-  const max = document.getElementById('s-god-max').value;
-  document.getElementById('s-god-display').textContent = `${min}/${max}`;
-}
-
-async function loadSettings() {
-  try {
-    const r = await fetch('/api/settings');
-    const d = await r.json();
-
-    selectProvider(d.llm_provider || 'gemini');
-    const st = document.getElementById('api-key-status');
-    st.textContent = d.api_key_set ? '✓ 已设置' : '未设置（使用 .env 中的值）';
-    st.className = 'api-key-status ' + (d.api_key_set ? 'set' : 'unset');
-
-    if (d.model_name) {
-      const sel = document.getElementById('model-select');
-      const opt = [...sel.options].find(o => o.value === d.model_name);
-      if (opt) sel.value = d.model_name;
-    }
-    if (d.local_llm_base_url) document.getElementById('local-url-input').value = d.local_llm_base_url;
-    if (d.local_llm_model) document.getElementById('local-model-input').value = d.local_llm_model;
-    if (d.token_limit) {
-      document.getElementById('token-limit-slider').value = d.token_limit;
-      document.getElementById('token-limit-display').textContent = formatNum(d.token_limit);
-    }
-    if (d.player_name) document.getElementById('player-name-input').value = d.player_name;
-
-    setSliderSilent('s-tick', d.world_tick_seconds, 's-tick-display');
-    setSliderSilent('s-npc-min', d.npc_min_think, 's-npc-min-display');
-    setSliderSilent('s-npc-max', d.npc_max_think, 's-npc-max-display');
-    setSliderSilent('s-hear', d.npc_hearing_radius, 's-hear-display');
-    setSliderSilent('s-vision', d.npc_vision_radius, 's-vision-display');
-    setSliderSilent('s-food-energy', d.food_energy_restore, 's-food-energy-display');
-    setSliderSilent('s-sleep-energy', d.sleep_energy_restore, 's-sleep-energy-display');
-    setSliderSilent('s-wood-rate', d.exchange_rate_wood, 's-wood-rate-display');
-    setSliderSilent('s-stone-rate', d.exchange_rate_stone, 's-stone-rate-display');
-    setSliderSilent('s-ore-rate', d.exchange_rate_ore, 's-ore-rate-display');
-    setSliderSilent('s-food-cost', d.food_cost_gold, 's-food-cost-display');
-    if (d.show_npc_thoughts !== undefined)
-      document.getElementById('show-thoughts-cb').checked = d.show_npc_thoughts;
-    updateGodDisplay();
-  } catch(e) { console.warn('loadSettings error', e); }
-}
-
-async function saveSettings() {
-  const body = {
-    llm_provider: currentProvider,
-    token_limit: parseInt(document.getElementById('token-limit-slider').value),
-    player_name: document.getElementById('player-name-input').value.trim(),
-    show_npc_thoughts: document.getElementById('show-thoughts-cb').checked,
-    world_tick_seconds: parseFloat(document.getElementById('s-tick').value),
-    npc_min_think: parseFloat(document.getElementById('s-npc-min').value),
-    npc_max_think: parseFloat(document.getElementById('s-npc-max').value),
-    god_min_think: parseFloat(document.getElementById('s-god-min').value),
-    god_max_think: parseFloat(document.getElementById('s-god-max').value),
-    npc_hearing_radius: parseInt(document.getElementById('s-hear').value),
-    npc_vision_radius: parseInt(document.getElementById('s-vision').value),
-    food_energy_restore: parseInt(document.getElementById('s-food-energy').value),
-    sleep_energy_restore: parseInt(document.getElementById('s-sleep-energy').value),
-    exchange_rate_wood: parseInt(document.getElementById('s-wood-rate').value),
-    exchange_rate_stone: parseInt(document.getElementById('s-stone-rate').value),
-    exchange_rate_ore: parseInt(document.getElementById('s-ore-rate').value),
-    food_cost_gold: parseInt(document.getElementById('s-food-cost').value),
-  };
-
-  if (currentProvider === 'gemini') {
-    const apiKey = document.getElementById('api-key-input').value.trim();
-    if (apiKey) body.api_key = apiKey;
-    body.model_name = document.getElementById('model-select').value;
-  } else {
-    body.local_llm_base_url = document.getElementById('local-url-input').value.trim();
-    body.local_llm_model = document.getElementById('local-model-input').value.trim();
-  }
-
-  try {
-    const r = await fetch('/api/settings', {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
-    });
-    const d = await r.json();
-    if (d.ok) {
-      const m = document.getElementById('settings-msg');
-      m.style.display = 'block'; m.textContent = '✓ 设置已保存';
-      setTimeout(() => m.style.display = 'none', 3000);
-      if (body.api_key) { document.getElementById('api-key-input').value = ''; loadSettings(); }
-    }
-  } catch(e) { console.warn('saveSettings error', e); }
-}
-
-function toggleApiKeyVisibility() {
-  const inp = document.getElementById('api-key-input');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-// ── Save management ────────────────────────────────────────────────────────
-async function loadSaveInfo() {
-  try {
-    const r = await fetch('/api/saves');
-    const d = await r.json();
-    const infoDiv = document.getElementById('save-info-display');
-    infoDiv.textContent = d.has_game_state ? '✓ 有游戏存档' : '暂无游戏存档';
-
-    const listDiv = document.getElementById('npc-memory-list');
-    listDiv.innerHTML = '';
-    const mems = d.npc_memories || {};
-    for (const [npcId, count] of Object.entries(mems)) {
-      const row = document.createElement('div');
-      row.className = 'npc-memory-row';
-      row.innerHTML = `
-        <span>${npcId} <small>(${count}条记忆)</small></span>
-        <button class="btn red" style="font-size:10px;padding:2px 7px" onclick="deleteNpcMemory('${npcId}')">删除</button>
-      `;
-      listDiv.appendChild(row);
-    }
-    if (!Object.keys(mems).length) {
-      listDiv.innerHTML = '<div style="color:#555;font-size:10px">暂无记忆存档</div>';
-    }
-  } catch(e) { console.warn('loadSaveInfo error', e); }
-}
-
-async function deleteAllSaves() {
-  if (!confirm('确定删除全部存档和记忆？此操作不可撤销。')) return;
-  await fetch('/api/saves/delete', { method: 'POST' });
-  loadSaveInfo();
-  addChat('system', '全部存档已删除');
-}
-
-async function deleteNpcMemory(npcId) {
-  if (!confirm(`确定删除 ${npcId} 的所有记忆？`)) return;
-  await fetch('/api/saves/delete_memory', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ npc_id: npcId })
+// ════════ CANVAS ════════
+const WORLD_W=20,WORLD_H=20,TS=30;
+let rainDrops=[],lightningA=0,_rAnimRunning=false;
+function initCanvas(){
+  const c=document.getElementById('world-canvas');
+  c.width=WORLD_W*TS; c.height=WORLD_H*TS;
+  document.getElementById('canvas-wrap').style.width=c.width+'px';
+  for(let i=0;i<90;i++) rainDrops.push({x:Math.random()*600,y:Math.random()*600,s:3+Math.random()*5,l:6+Math.random()*8});
+  c.addEventListener('click',e=>{
+    if(S.spawnMode){ const {tx,ty}=getTileXY(c,e); S.spawnTarget={x:tx,y:ty}; S.spawnMode=false; c.style.cursor='default'; document.getElementById('spawn-coord').textContent=`目标坐标: (${tx},${ty})`; return; }
+    const {tx,ty}=getTileXY(c,e);
+    document.getElementById('canvas-status').textContent=`选中: (${tx},${ty})`;
   });
-  loadSaveInfo();
-  addChat('system', `${npcId} 的记忆已删除`);
+  c.addEventListener('dblclick',e=>{
+    const {tx,ty}=getTileXY(c,e);
+    S.spawnTarget={x:tx,y:ty};
+    document.getElementById('spawn-coord').textContent=`目标坐标: (${tx},${ty})`;
+  });
+  startRainAnim();
+}
+function getTileXY(c,e){ const r=c.getBoundingClientRect(); return {tx:Math.floor((e.clientX-r.left)/TS),ty:Math.floor((e.clientY-r.top)/TS)}; }
+
+const TFILL={g:'#2d6a18',w:'#1a4a8a',r:'#4a4a4a',f:'#1a4a22',o:'#6b5230'};
+const TSTROKE={g:'#245812',w:'#122e62',r:'#383838',f:'#112a18',o:'#573f22'};
+const RICONS={w:'🪵',s:'🪨',o:'💎',f:'🍏',h:'🌿'};
+
+function renderCanvas(){
+  const world=S.world; if(!world) return;
+  const c=document.getElementById('world-canvas'); if(!c) return;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  // Tiles
+  (world.tiles||[]).forEach(tile=>{
+    const px=tile.x*TS,py=tile.y*TS;
+    ctx.fillStyle=TFILL[tile.t]||TFILL.g;
+    ctx.fillRect(px,py,TS,TS);
+    ctx.strokeStyle=TSTROKE[tile.t]||TSTROKE.g;
+    ctx.lineWidth=.3; ctx.strokeRect(px+.15,py+.15,TS-.3,TS-.3);
+    if(tile.e){ ctx.fillStyle='rgba(245,166,35,.18)'; ctx.fillRect(px,py,TS,TS); ctx.strokeStyle='#f5a62388'; ctx.lineWidth=1.5; ctx.strokeRect(px+.75,py+.75,TS-1.5,TS-1.5); }
+    if(tile.r&&tile.q>0){
+      const icon=RICONS[tile.r]||'?';
+      ctx.font=`${TS*.42}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(icon,px+TS/2,py+TS/2);
+      const pct=tile.q/(tile.mq||1);
+      ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(px+TS-11,py+2,9,4);
+      ctx.fillStyle=pct>.5?'#4caf50':pct>.2?'#ff9800':'#f44336'; ctx.fillRect(px+TS-11,py+2,9*pct,4);
+    }
+    if(tile.e){ ctx.font=`bold 9px sans-serif`; ctx.fillStyle='#f5a623'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText('E',px+TS/2,py+TS-1); }
+  });
+  // NPCs
+  (world.npcs||[]).forEach(npc=>drawNPC(ctx,npc,world.tick));
+  // Player
+  if(world.player){ const p=world.player; drawPlayer(ctx,p); }
+  // Spawn target highlight
+  if(S.spawnTarget){
+    ctx.strokeStyle='rgba(245,166,35,.8)'; ctx.lineWidth=2; ctx.setLineDash([3,3]);
+    ctx.strokeRect(S.spawnTarget.x*TS+1,S.spawnTarget.y*TS+1,TS-2,TS-2); ctx.setLineDash([]);
+  }
 }
 
-// ── Chat log ───────────────────────────────────────────────────────────────
-function addChat(cls, text) {
-  const log = document.getElementById('chat-log');
-  const d = document.createElement('div');
-  d.className = `chat-line chat-${cls}`;
-  d.textContent = text;
-  log.appendChild(d);
-  while (log.children.length > 200) log.removeChild(log.firstChild);
-  log.scrollTop = log.scrollHeight;
+function drawNPC(ctx,npc,tick){
+  const px=npc.x*TS+TS/2,py=npc.y*TS+TS/2,r=TS*.35;
+  const ep=npc.energy/100;
+  const ec=ep>.6?'#4ecca388':ep>.3?'#f5a62388':'#e9456088';
+  // Energy arc
+  ctx.beginPath(); ctx.arc(px,py,r+2.5,-Math.PI/2,-Math.PI/2); ctx.strokeStyle='#333355'; ctx.lineWidth=3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(px,py,r+2.5,-Math.PI/2,-Math.PI/2+Math.PI*2*ep); ctx.strokeStyle=ep>.6?'#4ecca3':ep>.3?'#f5a623':'#e94560'; ctx.lineWidth=3; ctx.stroke();
+  // Circle
+  ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+  ctx.fillStyle=npc.color||'#888'; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.lineWidth=1; ctx.stroke();
+  // Initial
+  ctx.font=`bold ${TS*.3}px sans-serif`; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText((npc.name||'?')[0].toUpperCase(),px,py);
+  // Processing dot
+  if(npc.is_processing){
+    const t=Date.now()/400;
+    ctx.beginPath(); ctx.arc(px+r*.75,py-r*.75,2.5,0,Math.PI*2);
+    ctx.fillStyle=`rgba(78,204,163,${.5+.5*Math.sin(t)})`; ctx.fill();
+  }
+  // Proposal badge
+  if(npc.pending_proposals>0){
+    ctx.beginPath(); ctx.arc(px-r*.7,py-r*.7,5,0,Math.PI*2);
+    ctx.fillStyle='#e94560'; ctx.fill();
+    ctx.font='bold 7px sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(npc.pending_proposals,px-r*.7,py-r*.7);
+  }
+  // Speech bubble
+  if(npc.last_message&&tick-npc.last_message_tick<5){
+    drawBubble(ctx,npc.last_message,px,py-r-4,npc.color||'#4ecca3');
+  }
 }
-function clearChat() { document.getElementById('chat-log').innerHTML = ''; }
-
-// ── Utils ──────────────────────────────────────────────────────────────────
-function formatNum(n) { return Number(n).toLocaleString(); }
-function fmtK(n) {
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1000) return (n/1000).toFixed(0) + 'k';
-  return String(n);
+function drawPlayer(ctx,p){
+  const px=p.x*TS+TS/2,py=p.y*TS+TS/2,r=TS*.36;
+  ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#aaa'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.font=`bold ${TS*.3}px sans-serif`; ctx.fillStyle='#111'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('P',px,py);
+}
+function drawBubble(ctx,text,bx,by,color){
+  ctx.font='11px system-ui';
+  const maxW=130,pad=5,lh=14;
+  const words=text.split('');
+  let line='',lines=[];
+  words.forEach(ch=>{ if(ctx.measureText(line+ch).width>maxW-pad*2){lines.push(line);line=ch;}else line+=ch; });
+  if(line) lines.push(line);
+  lines=lines.slice(-2);
+  const bw=Math.min(maxW,lines.reduce((m,l)=>Math.max(m,ctx.measureText(l).width),0)+pad*2+4);
+  const bh=lines.length*lh+pad*2;
+  const rx=bx-bw/2,ry=by-bh-6;
+  ctx.fillStyle='rgba(5,5,20,.85)'; ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(rx,ry,bw,bh,4); else ctx.rect(rx,ry,bw,bh);
+  ctx.fill(); ctx.strokeStyle=color; ctx.lineWidth=1; ctx.stroke();
+  ctx.fillStyle='#eee'; ctx.textAlign='left'; ctx.textBaseline='top';
+  lines.forEach((l,i)=>ctx.fillText(l,rx+pad,ry+pad+i*lh));
 }
 
-// ── Boot ───────────────────────────────────────────────────────────────────
-connectWS();
+// Rain animation
+function startRainAnim(){
+  if(_rAnimRunning) return; _rAnimRunning=true;
+  function frame(){
+    requestAnimationFrame(frame);
+    const w=S.world; if(!w) return;
+    const wt=w.weather;
+    if(wt!=='rainy'&&wt!=='storm'&&lightningA<=0) return;
+    const c=document.getElementById('world-canvas'); if(!c) return;
+    const ctx=c.getContext('2d');
+    if(wt==='rainy'||wt==='storm'){
+      const mul=wt==='storm'?2:1;
+      rainDrops.forEach(d=>{
+        ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x+2*mul,d.y+d.l*mul);
+        ctx.strokeStyle=`rgba(150,200,255,${0.2*mul})`; ctx.lineWidth=.8; ctx.stroke();
+        d.y+=d.s*mul; if(d.y>c.height){d.y=-10;d.x=Math.random()*c.width;}
+      });
+      if(wt==='storm'&&Math.random()<.004) lightningA=.35;
+    }
+    if(lightningA>0){
+      ctx.fillStyle=`rgba(200,220,255,${lightningA})`;
+      ctx.fillRect(0,0,c.width,c.height);
+      lightningA=Math.max(0,lightningA-.04);
+    }
+  }
+  frame();
+}
+
+// ════════ NPC TAB ════════
+function renderNPCs(npcs){
+  if(!npcs) return;
+  const el=document.getElementById('tab-npc'); el.innerHTML='';
+  npcs.forEach(npc=>{
+    const prof=npc.profile||{};
+    const ep=npc.energy;
+    const ec=ep>60?'#4caf50':ep>30?'#f5a623':'#e94560';
+    const inv=npc.inventory||{};
+    const items=['wood','stone','ore','food','herb','rope','potion','tool','bread','gold'];
+    const invHtml=items.map(k=>{ const v=inv[k]||0; const nz=v>0; return `<span class="inv-chip ${nz?'nz':''}">${k.slice(0,3)}: ${typeof v==='number'&&v!==Math.floor(v)?v.toFixed(1):v}</span>`; }).join('');
+    const goalHtml=(prof.goals||[]).map(g=>`<li style="font-size:11px">${escH(g)}</li>`).join('');
+    const div=document.createElement('div'); div.className='npc-panel-card';
+    div.innerHTML=`
+      <div class="npc-panel-header">
+        <div class="npc-mini-dot" style="background:${npc.color||'#888'}">${(npc.name||'?')[0]}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:5px">
+            <span class="npc-panel-name">${escH(npc.name||'NPC')}</span>
+            ${prof.title?`<span class="npc-title-badge">${escH(prof.title)}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">@(${npc.x},${npc.y}) · ${npc.last_action||'idle'}</div>
+        </div>
+        ${npc.pending_proposals>0?`<span class="proposal-badge">📨${npc.pending_proposals}</span>`:''}
+      </div>
+      <div class="energy-bar-wrap">
+        <div class="energy-label">体力 ${npc.energy}/100 ${npc.active_tool?'🔧':''}${npc.active_rope?'🪢':''}</div>
+        <div class="energy-track"><div class="energy-fill" style="width:${ep}%;background:${ec}"></div></div>
+      </div>
+      ${npc.last_message?`<div class="last-msg" title="${escH(npc.last_message)}">"${escH(npc.last_message.slice(0,50))}${npc.last_message.length>50?'…':''}"</div>`:''}
+      ${npc.thought?`<div style="font-size:10px;color:var(--muted);margin-top:2px">💭 ${escH(npc.thought.slice(0,60))}</div>`:''}
+      <button class="npc-expand-btn" onclick="toggleExpand(this)">▼ 展开详情</button>
+      <div class="npc-details">
+        ${prof.personality?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">性格: ${escH(prof.personality)}</div>`:''}
+        ${prof.backstory?`<div style="font-size:11px;margin-bottom:6px">${escH(prof.backstory)}</div>`:''}
+        ${goalHtml?`<ul style="padding-left:16px;margin-bottom:6px">${goalHtml}</ul>`:''}
+        <div class="inv-chips">${invHtml}</div>
+        <button class="btn-ghost" style="font-size:11px;padding:4px 10px" onclick='openEditNPC(${JSON.stringify(npc.id)},${JSON.stringify(npc.profile||{})},${JSON.stringify(npc.color)},${JSON.stringify(npc.name)})'>✏️ 编辑档案</button>
+      </div>
+    `;
+    el.appendChild(div);
+  });
+}
+function toggleExpand(btn){ const d=btn.nextElementSibling; d.classList.toggle('open'); btn.textContent=d.classList.contains('open')?'▲ 收起':'▼ 展开详情'; }
+
+// ════════ ECONOMY TAB ════════
+const INAMES={wood:'木头',stone:'石头',ore:'矿石',food:'食物',herb:'草药',rope:'绳索',potion:'药水',tool:'工具',bread:'面包',gold:'金币'};
+function updateEconomy(market){
+  if(!market) return;
+  const tbody=document.getElementById('market-tbody'); tbody.innerHTML='';
+  Object.entries(market.prices||{}).forEach(([item,p])=>{
+    const tr=document.createElement('tr');
+    tr.className=p.trend==='↑'?'up':p.trend==='↓'?'down':'';
+    const tc=p.trend==='↑'?'trend-up':p.trend==='↓'?'trend-down':'trend-flat';
+    tr.innerHTML=`<td>${INAMES[item]||item}</td><td>${p.current.toFixed(2)}</td><td>${p.base.toFixed(2)}</td><td class="${tc}">${p.trend}</td><td class="${tc}">${p.change_pct>0?'+':''}${p.change_pct}%</td>`;
+    tbody.appendChild(tr);
+  });
+  drawPriceChart();
+}
+function drawPriceChart(){
+  const item=document.getElementById('chart-item-sel')?.value||'wood';
+  const canvas=document.getElementById('price-chart-canvas'); if(!canvas) return;
+  const ctx=canvas.getContext('2d'); const w=canvas.width,h=canvas.height;
+  ctx.clearRect(0,0,w,h); ctx.fillStyle='#111128'; ctx.fillRect(0,0,w,h);
+  const hist=(S.world?.market?.history)||{};
+  const data=hist[item];
+  if(!data||data.length<2){ ctx.fillStyle='#666'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText('暂无数据',w/2,h/2); return; }
+  const pad=22;
+  const minV=Math.min(...data)*.95,maxV=Math.max(...data)*1.05;
+  const sx=i=>pad+(i/(data.length-1))*(w-pad*2);
+  const sy=v=>h-pad-(v-minV)/(maxV-minV+.001)*(h-pad*2);
+  // Grid
+  ctx.strokeStyle='rgba(42,42,74,.8)'; ctx.lineWidth=1;
+  for(let i=0;i<=3;i++){ const y=pad+i*(h-pad*2)/3; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke(); const val=maxV-(maxV-minV)/3*i; ctx.fillStyle='rgba(136,136,170,.6)'; ctx.font='9px sans-serif'; ctx.textAlign='right'; ctx.fillText(val.toFixed(2),pad-2,y+3); }
+  // Gradient fill
+  const grad=ctx.createLinearGradient(0,pad,0,h-pad);
+  grad.addColorStop(0,'rgba(78,204,163,.28)'); grad.addColorStop(1,'rgba(78,204,163,.02)');
+  ctx.fillStyle=grad; ctx.beginPath(); ctx.moveTo(sx(0),h-pad);
+  data.forEach((v,i)=>ctx.lineTo(sx(i),sy(v)));
+  ctx.lineTo(sx(data.length-1),h-pad); ctx.closePath(); ctx.fill();
+  // Line
+  ctx.strokeStyle='#4ecca3'; ctx.lineWidth=2; ctx.lineJoin='round';
+  ctx.beginPath(); data.forEach((v,i)=>{ if(i===0) ctx.moveTo(sx(i),sy(v)); else ctx.lineTo(sx(i),sy(v)); }); ctx.stroke();
+  // Endpoints
+  [[0,data[0]],[data.length-1,data[data.length-1]]].forEach(([i,v])=>{ ctx.beginPath(); ctx.arc(sx(i),sy(v),3,0,Math.PI*2); ctx.fillStyle='#4ecca3'; ctx.fill(); });
+  // Label
+  ctx.fillStyle='rgba(136,136,170,.8)'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(`${INAMES[item]||item} · 最近${data.length}次`,w/2,h-5);
+}
+
+// ════════ CONTROLS TAB ════════
+function updateControls(msg){
+  const el=document.getElementById('god-commentary');
+  if(msg.god?.commentary) el.textContent=msg.god.commentary;
+  document.querySelectorAll('.weather-btn').forEach(b=>{
+    const bw=b.dataset.w; b.classList.toggle('active-weather',bw===msg.weather);
+  });
+  updateSimBtns();
+}
+function setWeather(w){ sendWS({type:'god_direct',command:'set_weather',value:w}); }
+function spawnResource(){
+  if(!S.spawnTarget){ alert('请先双击地图选择目标坐标'); return; }
+  const res=document.getElementById('spawn-res-type').value;
+  const qty=parseInt(document.getElementById('spawn-qty').value)||5;
+  sendWS({type:'god_direct',command:'spawn_resource',resource_type:res,x:S.spawnTarget.x,y:S.spawnTarget.y,quantity:qty});
+  S.spawnTarget=null; document.getElementById('spawn-coord').textContent='双击地图选择目标坐标';
+}
+
+// ════════ SETTINGS TAB ════════
+function syncSettings(s){
+  if(!s) return;
+  const pairs=[['sl-world-tick','sv-world-tick',s.world_tick_seconds,'s'],['sl-npc-min','sv-npc-min',s.npc_min_think,'s'],['sl-npc-max','sv-npc-max',s.npc_max_think,'s'],['sl-vision','sv-vision',s.npc_vision_radius,''],['sl-hearing','sv-hearing',s.npc_hearing_radius,'']];
+  pairs.forEach(([slId,svId,val,unit])=>{ const sl=document.getElementById(slId); if(sl&&!sl.matches(':active')){ sl.value=val||0; document.getElementById(svId).textContent=(val||0)+unit; } });
+  const tl=document.getElementById('sl-token'); if(tl&&!tl.matches(':active')){ const lim=s.token_limit||(S.world?.token_usage?.session_limit)||100000; tl.value=lim; document.getElementById('sv-token').textContent=Math.round(lim/1000)+'k'; }
+  const tog=document.getElementById('toggle-thoughts'); if(tog) tog.classList.toggle('on',!!s.show_npc_thoughts);
+}
+function slVal(id,v,unit){ const el=document.getElementById(id); if(el) el.textContent=parseFloat(v).toFixed(unit==='s'?1:0)+unit; }
+function setProvider(p){ S.provider=p; document.getElementById('prov-gemini').classList.toggle('active',p==='gemini'); document.getElementById('prov-local').classList.toggle('active',p==='local'); document.getElementById('gemini-fields').style.display=p==='gemini'?'':'none'; document.getElementById('local-fields').style.display=p==='local'?'':'none'; }
+function toggleApiVis(){ const inp=document.getElementById('api-key-input'); inp.type=inp.type==='password'?'text':'password'; }
+function saveLLMSettings(){
+  const data={llm_provider:S.provider};
+  if(S.provider==='gemini'){ const k=document.getElementById('api-key-input').value.trim(); if(k) data.api_key=k; const m=document.getElementById('model-name-input').value.trim(); if(m) data.model_name=m; }
+  else { data.local_llm_base_url=document.getElementById('local-url-input').value.trim(); data.local_llm_model=document.getElementById('local-model-input').value.trim(); }
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(()=>alert('LLM设置已保存'));
+}
+function saveGameSettings(){
+  const data={};
+  [['sl-world-tick','world_tick_seconds'],['sl-npc-min','npc_min_think'],['sl-npc-max','npc_max_think'],['sl-vision','npc_vision_radius'],['sl-hearing','npc_hearing_radius']].forEach(([slId,key])=>{ const sl=document.getElementById(slId); if(sl) data[key]=parseFloat(sl.value); });
+  const tl=document.getElementById('sl-token'); if(tl) data.token_limit=parseInt(tl.value);
+  const tog=document.getElementById('toggle-thoughts'); if(tog) data.show_npc_thoughts=tog.classList.contains('on');
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(()=>alert('游戏设置已保存'));
+}
+async function deleteAllSaves(){ if(!confirm('确定删除所有存档？')) return; await fetch('/api/saves/delete',{method:'POST'}); alert('存档已清空'); }
+async function fetchSaves(){
+  const data=await fetch('/api/saves').then(r=>r.json()).catch(()=>[]);
+  const el=document.getElementById('save-list');
+  if(!data?.length){ el.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px">暂无存档</div>'; return; }
+  el.innerHTML=data.map(s=>`<div class="save-item" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:12px"><b>${s.npc_id||'NPC'}</b><br><span style="color:var(--muted)">${s.count||0} 条记忆 · Tick ${s.latest_tick||0}</span></div><button class="btn-ghost" style="font-size:12px" onclick="closeModal('load-modal')">加载</button></div>`).join('');
+}
+
+// ════════ PLAYER BAR ════════
+function updatePlayerBar(player){
+  const bar=document.getElementById('player-bar');
+  if(!player){ bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  document.getElementById('pname').textContent=player.name||'Player';
+  document.getElementById('penergy').textContent=player.energy??100;
+  document.getElementById('ppos').textContent=`(${player.x},${player.y})`;
+}
+function playerMove(dx,dy){ sendWS({type:'player_action',action:'move',dx,dy}); }
+function playerTalk(){ const inp=document.getElementById('player-talk-input'); const msg=inp.value.trim(); if(!msg) return; sendWS({type:'player_action',action:'talk',message:msg,target_id:null}); inp.value=''; }
+
+// ════════ EVENT LOG ════════
+const LOG_CLASSES={npc_spoke:'log-talk',npc_traded:'log-trade',trade_accepted:'log-trade',npc_gathered:'log-gather',npc_crafted:'log-craft',npc_sold:'log-trade',npc_bought:'log-trade',weather_changed:'log-weather',market_updated:'log-market'};
+function processEvents(events){
+  events.forEach(ev=>{
+    if(!ev.summary) return;
+    const cls=LOG_CLASSES[ev.type]||'log-default';
+    addLog(ev.summary,cls);
+    if(['npc_sold','npc_bought','npc_crafted','trade_accepted'].includes(ev.type)){
+      const tcls=ev.type==='npc_sold'?'tli-sell':ev.type==='npc_bought'?'tli-buy':ev.type==='npc_crafted'?'tli-craft':'tli-accept';
+      S.tradeLog.unshift({txt:ev.summary,cls:tcls});
+      if(S.tradeLog.length>30) S.tradeLog.pop();
+      if(S.activeTab==='eco') renderTradeLog();
+    }
+  });
+}
+function addLog(txt,cls){
+  const el=document.getElementById('event-log'); if(!el) return;
+  const div=document.createElement('div'); div.className=`log-entry ${cls}`; div.textContent=txt;
+  el.appendChild(div);
+  if(el.children.length>80) el.removeChild(el.firstChild);
+  el.scrollTop=el.scrollHeight;
+}
+function clearLog(){ const el=document.getElementById('event-log'); if(el) el.innerHTML=''; }
+function toggleLog(){ S.logOpen=!S.logOpen; const el=document.getElementById('event-log'); if(el) el.className=S.logOpen?'':'collapsed'; document.getElementById('log-toggle-lbl').textContent=S.logOpen?'▲ 折叠':'▼ 展开'; }
+function renderTradeLog(){ const el=document.getElementById('trade-log'); if(!el) return; el.innerHTML=S.tradeLog.slice(0,12).map(e=>`<div class="trade-log-item ${e.cls}">${escH(e.txt)}</div>`).join(''); }
+
+// ════════ NPC PROFILES ════════
+async function fetchProfiles(){
+  const data=await fetch('/api/npc_profiles').then(r=>r.json()).catch(()=>[]);
+  const el=document.getElementById('npc-profile-cards'); if(!el) return;
+  el.innerHTML='';
+  data.forEach(p=>{
+    S.profileCache[p.npc_id]=p;
+    const div=document.createElement('div'); div.className='npc-card';
+    const goals=p.goals||[];
+    const goalsHtml=Array.from({length:Math.max(3,goals.length)},(_, i)=>`<input type="text" data-goal="${i}" value="${escH(goals[i]||'')}" placeholder="目标${i+1}">`).join('');
+    div.innerHTML=`
+      <div class="npc-card-header">
+        <div class="npc-dot" style="background:${p.color||'#888'}">${(p.name||'?')[0]}</div>
+        <div><div class="npc-card-name">${escH(p.name||'NPC')}</div><div class="npc-card-title">${escH(p.title||'')}</div></div>
+      </div>
+      <div class="form-group"><label>背景故事</label><textarea data-field="backstory" rows="2">${escH(p.backstory||'')}</textarea></div>
+      <div class="form-group"><label>性格</label><input data-field="personality" value="${escH(p.personality||'')}"></div>
+      <div class="form-group"><label>目标</label><div class="goals-row">${goalsHtml}</div></div>
+      <div class="form-group"><label>说话风格</label><input data-field="speech_style" value="${escH(p.speech_style||'')}"></div>
+      <button class="btn-primary" style="width:100%;margin-top:4px" data-npc-id="${p.npc_id}" onclick="saveProfileCard(this)">💾 保存</button>
+    `;
+    el.appendChild(div);
+  });
+}
+async function saveProfileCard(btn){
+  const npcId=btn.dataset.npcId; const card=btn.closest('.npc-card');
+  const body={...S.profileCache[npcId]||{},npc_id:npcId};
+  card.querySelectorAll('[data-field]').forEach(inp=>body[inp.dataset.field]=inp.value);
+  const goals=[]; card.querySelectorAll('[data-goal]').forEach(inp=>{ if(inp.value.trim()) goals.push(inp.value.trim()); }); body.goals=goals;
+  await fetch(`/api/npc_profiles/${npcId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  btn.textContent='✅ 已保存'; setTimeout(()=>btn.textContent='💾 保存',1500);
+}
+async function exportProfiles(){
+  const data=await fetch('/api/npc_profiles/export').then(r=>r.json()).catch(()=>[]);
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})); a.download='npc_profiles.json'; a.click();
+}
+async function importProfiles(input){
+  const file=input.files[0]; if(!file) return;
+  const data=JSON.parse(await file.text());
+  await fetch('/api/npc_profiles/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  fetchProfiles();
+}
+function openEditNPC(npcId,prof,color,name){
+  document.getElementById('edit-npc-id').value=npcId;
+  document.getElementById('edit-name').value=name||prof.name||'';
+  document.getElementById('edit-title').value=prof.title||'';
+  document.getElementById('edit-color').value=color||'#888888';
+  document.getElementById('edit-backstory').value=prof.backstory||'';
+  document.getElementById('edit-personality').value=prof.personality||'';
+  document.getElementById('edit-goals').value=(prof.goals||[]).join('\n');
+  document.getElementById('edit-speech-style').value=prof.speech_style||'';
+  document.getElementById('npc-edit-modal').classList.add('open');
+}
+async function saveNPCEdit(){
+  const npcId=document.getElementById('edit-npc-id').value;
+  const body={npc_id:npcId,name:document.getElementById('edit-name').value.trim(),title:document.getElementById('edit-title').value.trim(),color:document.getElementById('edit-color').value,backstory:document.getElementById('edit-backstory').value.trim(),personality:document.getElementById('edit-personality').value.trim(),goals:document.getElementById('edit-goals').value.split('\n').map(s=>s.trim()).filter(Boolean),speech_style:document.getElementById('edit-speech-style').value.trim()};
+  await fetch(`/api/npc_profiles/${npcId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  closeModal('npc-edit-modal');
+}
+
+// ════════ TAB SWITCH ════════
+function switchTab(tab,btn){
+  S.activeTab=tab;
+  document.querySelectorAll('.side-tab').forEach(t=>t.classList.remove('active')); btn.classList.add('active');
+  ['npc','eco','ctrl','settings'].forEach(t=>{ const el=document.getElementById('tab-'+t); if(el) el.style.display=t===tab?'':'none'; });
+  if(tab==='eco'&&S.world?.market){ updateEconomy(S.world.market); renderTradeLog(); }
+  if(tab==='npc'&&S.world) renderNPCs(S.world.npcs);
+  if(tab==='ctrl'&&S.world) updateControls(S.world);
+}
+
+// ════════ KEYBOARD ════════
+document.addEventListener('keydown',e=>{
+  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  if(!document.getElementById('game-screen').classList.contains('visible')) return;
+  const moves={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+  if(moves[e.key]&&S.world?.player){ e.preventDefault(); playerMove(...moves[e.key]); }
+  if(e.key==='g') sendWS({type:'player_action',action:'gather'});
+  if(e.key==='f') sendWS({type:'player_action',action:'eat'});
+  if(e.key===' '){ e.preventDefault(); toggleSim(); }
+});
+
+// ════════ UTILS ════════
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ════════ INIT ════════
+window.addEventListener('DOMContentLoaded',()=>{
+  initCanvas();
+  connectWS();
+  fetch('/api/settings').then(r=>r.json()).then(s=>{
+    if(s.llm_provider) setProvider(s.llm_provider);
+    if(s.model_name) document.getElementById('model-name-input').value=s.model_name;
+    if(s.local_llm_base_url) document.getElementById('local-url-input').value=s.local_llm_base_url||'';
+    if(s.local_llm_model) document.getElementById('local-model-input').value=s.local_llm_model||'';
+    S.simRunning=!!s.simulation_running;
+    updateSimBtns();
+  }).catch(()=>{});
+});
 </script>
 </body>
 </html>

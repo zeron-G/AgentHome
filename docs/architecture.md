@@ -11,7 +11,10 @@
 - [LLM 双后端调度](#llm-双后端调度)
 - [事件系统](#事件系统)
 - [游戏循环详解](#游戏循环详解)
+- [市场系统设计](#市场系统设计)
+- [提案式交易流程](#提案式交易流程)
 - [WebSocket 数据流](#websocket-数据流)
+- [前端界面架构](#前端界面架构)
 - [并发安全](#并发安全)
 
 ---
@@ -22,23 +25,24 @@
 ┌─────────────────────────────────────────────────────────┐
 │                     浏览器 (前端)                         │
 │  HTML5 Canvas  +  原生 JavaScript  +  WebSocket Client   │
+│  封面屏幕 / 新游戏流程 / 主游戏界面 / 经济面板              │
 └────────────────────────┬────────────────────────────────┘
                          │ WebSocket /ws
-                         │ HTTP GET/POST /api/settings
+                         │ HTTP REST /api/*
 ┌────────────────────────▼────────────────────────────────┐
 │                   FastAPI + uvicorn                      │
 │                    (asyncio 事件循环)                     │
-│  ┌──────────────┐   ┌───────────────┐   ┌────────────┐ │
-│  │  WebSocket   │   │  REST API     │   │  Static    │ │
-│  │  Endpoint    │   │  /api/settings│   │  Files     │ │
-│  └──────┬───────┘   └───────────────┘   └────────────┘ │
-│         │                                               │
-│  ┌──────▼───────────────────────────────────────────┐  │
-│  │                   GameLoop                        │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  │  │
-│  │  │ WorldTick  │  │ NPCBrain×4 │  │  GodBrain  │  │  │
-│  │  │  Loop      │  │  Loops     │  │   Loop     │  │  │
-│  │  └────────────┘  └────────────┘  └────────────┘  │  │
+│  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐  │
+│  │  WebSocket   │  │  REST API     │  │   Static     │  │
+│  │  Endpoint    │  │  /api/*       │  │   Files      │  │
+│  └──────┬───────┘  └───────────────┘  └──────────────┘  │
+│         │                                                │
+│  ┌──────▼───────────────────────────────────────────┐   │
+│  │                   GameLoop                        │   │
+│  │  ┌────────────┐  ┌─────────────┐  ┌───────────┐  │   │
+│  │  │ WorldTick  │  │ NPCBrain ×4 │  │ GodBrain  │  │   │
+│  │  │  + Market  │  │   Loops     │  │   Loop    │  │   │
+│  │  └────────────┘  └─────────────┘  └───────────┘  │   │
 │  └───────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────┘
                          │
@@ -59,7 +63,7 @@
 
 ```
 GameLoop.start()
-├── Task: _world_tick_loop()      # 世界时间推进 + 被动效果
+├── Task: _world_tick_loop()      # 世界时间推进 + 被动效果 + 市场更新
 ├── Task: _npc_brain_loop(Alice)  # Alice 的大脑（独立循环）
 ├── Task: _npc_brain_loop(Bob)    # Bob 的大脑
 ├── Task: _npc_brain_loop(Carol)  # Carol 的大脑
@@ -185,10 +189,11 @@ EventBus.dispatch(event, world)
     │
     └── for npc in world.npcs:
             if manhattan_dist(npc, event) <= radius:
-                npc.memory.inbox.append(event)   # NPC 下次决策时读取
+                npc.memory.inbox.append(event.summary)
+                # NPC 下次决策时读取，决策后清空 inbox
 ```
 
-### 事件类型一览
+### 事件类型与影响半径
 
 | 事件 | 触发动作 | 默认半径 |
 |------|---------|---------|
@@ -201,6 +206,15 @@ EventBus.dispatch(event, world)
 | `npc_ate` | `eat` | 2 格 |
 | `npc_exchanged` | `exchange` | 4 格 |
 | `npc_bought_food` | `buy_food` | 4 格 |
+| `npc_crafted` | `craft` | 3 格 |
+| `npc_sold` | `sell` | 4 格 |
+| `npc_bought` | `buy` | 4 格 |
+| `npc_used_item` | `use_item` | 2 格 |
+| `trade_proposed` | `propose_trade` | 5 格 |
+| `trade_accepted` | `accept_trade` | 5 格 |
+| `trade_rejected` | `reject_trade` | 5 格 |
+| `trade_countered` | `counter_trade` | 5 格 |
+| `market_updated` | 市场更新循环 | 全局 |
 | `npc_thought` | `think` | 0 格（仅自己） |
 | `weather_changed` | 上帝动作 | 全局 |
 | `resource_spawned` | 上帝动作 | 全局 |
@@ -213,11 +227,16 @@ EventBus.dispatch(event, world)
 ### World Tick Loop（每 3 秒）
 
 ```
-while running:
+while simulation_running:
     acquire _world_lock
         world.time.advance()          # 时间推进（早晨/白天/黄昏/夜晚）
-        world_manager.apply_passive() # 体力消耗 + 资源再生 + 自动进食
+        world_manager.apply_passive() # 体力消耗 + 资源再生 + 提案清理
+        if tick % MARKET_UPDATE_INTERVAL == 0:
+            market_event = update_market()  # 价格更新
     release _world_lock
+
+    if market_event:
+        event_bus.dispatch(market_event)
 
     if god.pending_commands:          # 浏览器 UI 直接指令（无 LLM）
         for cmd in pending_commands:
@@ -234,7 +253,7 @@ while running:
 ```
 await sleep(random 1-4s)             # 错开启动，避免 API 并发峰值
 
-while running:
+while simulation_running:
     if token_tracker.paused:
         await sleep(2s)
         continue
@@ -263,7 +282,7 @@ while running:
 ```
 await sleep(random 5-10s)           # 延迟首次行动
 
-while running:
+while simulation_running:
     if paused: await sleep(2s); continue
 
     action = await god_agent.process(god, world)
@@ -275,6 +294,79 @@ while running:
 
     await sleep(random 20-40s)       # 上帝行动频率较低
 ```
+
+---
+
+## 市场系统设计
+
+### 价格更新流程
+
+```
+每 MARKET_UPDATE_INTERVAL ticks 触发：
+
+for item in all_items:
+    # 供给量：地图资源 + NPC 库存
+    supply = sum(tile.resource.quantity for tiles with item)
+             + sum(npc.inventory.get(item) for all npcs)
+    supply = max(supply, 1)   # 避免除零
+
+    # 需求代理：NPC 体力越低 = 对消耗品需求越高
+    avg_energy = mean(npc.energy for all npcs)
+    demand = (100 - avg_energy) / 100 + 0.5   # 0.5 ~ 1.5
+
+    # 天气修正
+    if storm:   food×1.4, herb×0.7
+    if rainy:   herb×1.2
+
+    # 随机波动
+    noise = random(1 - volatility, 1 + volatility)
+
+    # 目标价
+    target = base × (demand / (supply / 10)) × weather_mod × noise
+    target = clamp(target, min_p, max_p)
+
+    # 指数平滑更新
+    current = current × (1 - smoothing) + target × smoothing
+
+    # 记录历史（最多30点）
+    history[item].append(current)
+```
+
+### 市场价格影响行为
+
+NPC 在 system prompt 中会收到当前市场价格表（趋势↑↓），并被鼓励：
+- 高价时卖出（`sell`）、低价时买入（`buy`）
+- 对稀缺资源（高价）优先采集
+- 制造品价格高于原材料时主动制造（`craft`）
+
+---
+
+## 提案式交易流程
+
+提案式交易允许 NPC 进行异步协商，比 `trade`（同步双向同意）更真实。
+
+```
+[Alice] propose_trade → Bob (ore ×2, request stone ×5)
+         │
+         ▼ 存入 bob.pending_proposals
+         │
+[系统提示] 下次 Bob 决策时，提案模块被注入 system prompt：
+         "你有待处理的提案，本轮必须回应"
+         │
+         ├── Bob: accept_trade (proposal_from="npc_alice")
+         │      → 双方库存原子交换 → trade_accepted 事件
+         │
+         ├── Bob: reject_trade (proposal_from="npc_alice")
+         │      → 清除提案 → trade_rejected 事件 → Alice inbox 收到通知
+         │
+         └── Bob: counter_trade (proposal_from="npc_alice",
+                  offer_item="stone", offer_qty=3,
+                  request_item="ore", request_qty=2)
+                → 向 Alice 发新提案 → trade_countered 事件
+                → Alice 下一轮回应（最多往返数轮）
+```
+
+过期处理：提案超过 10 ticks 未响应，由 `apply_passive()` 自动清除（防止无限积压）。
 
 ---
 
@@ -294,12 +386,80 @@ while running:
                             │
                       send to all WSs
 
+[Market Update] ──每5tick──▶ broadcast(snapshot + market_updated event)
+
 [浏览器] ──god_command──▶ [FastAPI /ws]
                                │
                                ▼
                     god.pending_commands.append(cmd)
                     (在下一个 world tick 处理)
+
+[浏览器] ──player_action──▶ [FastAPI /ws]
+                                │
+                                ▼
+                    game_loop.handle_player_action(msg)
+                    apply_player_action → broadcast
 ```
+
+---
+
+## 前端界面架构
+
+### 应用状态机
+
+```
+AppState: cover → (新游戏) → new_game_modal → playing
+          cover → (读档)   → load_modal     → playing
+          cover → (快速)   → playing (直接)
+          playing → (设置)  → 返回封面
+```
+
+### 封面屏幕
+
+- 全屏深色背景 + HTML5 Canvas 粒子网络动画（连线效果）
+- 游戏 LOGO + 副标题
+- 三按钮：新游戏 / 读取存档 / 快速开始
+
+### 新游戏流程（Modal）
+
+两个 Tab：
+
+**Tab A - 地图设置**：
+- 随机种子输入框
+- 20×20 网格地图编辑器（点击/拖动涂色）
+- 地块调色板：草地 / 岩石 / 森林 / 城镇
+
+**Tab B - NPC 档案**：
+- 4 个 NPC 卡片，可编辑 title / backstory / goals / speech_style
+- 导入/导出 JSON 按钮
+
+### 主游戏界面
+
+```
+┌──── Header: Day/时间/天气/Token进度条/模拟按钮 ──────────┐
+├──── Canvas (20×20地图) ────────┬──── 4-Tab 面板 ─────────┤
+│   NPC 圆形头像 + 能量弧         │  👥 NPC 卡片           │
+│   说话气泡（3s淡出）            │  📊 经济面板           │
+│   思考时旋转虚线环              │  🎮 控制面板           │
+│   天气粒子（雨滴/闪电）         │  ⚙️ 设置面板           │
+├──── 玩家控制条 (WASD) ─────────┴────────────────────────┤
+└──── 事件日志（滚动）───────────────────────────────────────┘
+```
+
+### 经济面板（📊 Economy Tab）
+
+- **价格表**：物品 | 当前价 | 基准 | 趋势 ↑↓ | 变化%
+- **价格历史折线图**：HTML5 Canvas 绘制，物品选择器，最近 30 个价格点，渐变填充
+- **最近交易记录**：来自 `npc_sold` / `npc_bought` / `trade_accepted` 事件
+
+### NPC 卡片（👥 NPC Tab）
+
+每个 NPC 卡片包含：
+- 彩色圆形头像 + 名字 + 称号
+- 能量条（低于30显示红色）
+- 库存概览（仅显示数量>0的物品）
+- 展开：背景故事 / 当前目标 / 上次发言
+- 编辑按钮 → 弹窗热编辑档案
 
 ---
 
@@ -311,5 +471,6 @@ while running:
 | `asyncio.Lock (_lock in TokenTracker)` | Token 计数器 | 多个 agent 并发记录时的原子操作 |
 | `npc.is_processing` | 单个 NPC 状态 | 防止同一 NPC 被重入（保险措施） |
 | WebSocket 广播 | `ws_manager.active` 集合 | 广播时异常的连接被自动清理 |
+| `pending_proposals` 过期清理 | NPC 提案队列 | `apply_passive()` 清除超时提案防积压 |
 
 > **注意**：asyncio 是单线程协作式并发，Lock 保护的是协程间的切换点，而非真正的多线程竞争。此架构在 Python asyncio 单进程内是安全的。

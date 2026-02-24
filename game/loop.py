@@ -239,9 +239,17 @@ class GameLoop:
     async def _world_tick_loop(self):
         """Advances world time and passive effects every WORLD_TICK_SECONDS."""
         while self._simulation_running:
+            market_event = None
             async with self._world_lock:
                 self.world.time.advance()
                 self.world_manager.apply_passive(self.world)
+
+                # Update market prices every MARKET_UPDATE_INTERVAL ticks
+                tick = self.world.time.tick
+                if tick % config.MARKET_UPDATE_INTERVAL == 0:
+                    market_event = self.world_manager.update_market(self.world)
+            if market_event:
+                self.event_bus.dispatch(market_event, self.world)
 
             # Apply any queued direct god commands (immediate, no LLM)
             if self.world.god.pending_commands:

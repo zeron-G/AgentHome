@@ -5,7 +5,6 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -115,6 +114,100 @@ async def post_settings(request: Request):
             game_loop.world.player.name = name
 
     return JSONResponse({"ok": True})
+
+
+# ── NPC Profile API ───────────────────────────────────────────────────────────
+
+@app.get("/api/npc_profiles")
+async def get_npc_profiles():
+    """Return all NPC profiles."""
+    profiles = []
+    for npc in game_loop.world.npcs:
+        prof = getattr(npc, "profile", None)
+        if prof:
+            profiles.append(prof.to_dict())
+        else:
+            profiles.append({"npc_id": npc.npc_id, "name": npc.name})
+    return JSONResponse(profiles)
+
+
+@app.put("/api/npc_profiles/{npc_id}")
+async def update_npc_profile(npc_id: str, request: Request):
+    """Hot-update a single NPC's profile."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+
+    npc = game_loop.world.get_npc(npc_id)
+    if not npc:
+        return JSONResponse({"ok": False, "error": "NPC not found"}, status_code=404)
+
+    from engine.world import NPCProfile
+    data["npc_id"] = npc_id  # ensure id matches
+    try:
+        profile = NPCProfile.from_dict(data)
+        profile.apply_to_npc(npc)
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+
+@app.get("/api/npc_profiles/export")
+async def export_npc_profiles():
+    """Export all NPC profiles as JSON array."""
+    profiles = []
+    for npc in game_loop.world.npcs:
+        prof = getattr(npc, "profile", None)
+        if prof:
+            profiles.append(prof.to_dict())
+    return JSONResponse(profiles)
+
+
+@app.post("/api/npc_profiles/import")
+async def import_npc_profiles(request: Request):
+    """Import and apply NPC profiles from JSON array."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+
+    from engine.world import NPCProfile
+    updated = []
+    for item in data:
+        npc_id = item.get("npc_id", "")
+        npc = game_loop.world.get_npc(npc_id)
+        if npc:
+            try:
+                profile = NPCProfile.from_dict(item)
+                profile.apply_to_npc(npc)
+                updated.append(npc_id)
+            except Exception:
+                pass
+    return JSONResponse({"ok": True, "updated": updated})
+
+
+# ── Market API ────────────────────────────────────────────────────────────────
+
+@app.get("/api/market")
+async def get_market():
+    """Return current market state."""
+    market = game_loop.world.market
+    prices = {}
+    for item, mp in market.prices.items():
+        prices[item] = {
+            "base": mp.base,
+            "current": round(mp.current, 2),
+            "min": mp.min_p,
+            "max": mp.max_p,
+            "trend": mp.trend,
+            "change_pct": mp.change_pct,
+        }
+    return JSONResponse({
+        "prices": prices,
+        "history": {item: list(hist) for item, hist in market.history.items()},
+        "last_update_tick": market.last_update_tick,
+    })
 
 
 # ── Saves API ─────────────────────────────────────────────────────────────────

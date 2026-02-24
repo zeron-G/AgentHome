@@ -32,6 +32,16 @@ class EventType(str, Enum):
     PLAYER_GATHERED = "player_gathered"
     PLAYER_SPOKE = "player_spoke"
     PLAYER_TRADED = "player_traded"
+    # Economy / crafting events
+    NPC_CRAFTED = "npc_crafted"
+    NPC_SOLD = "npc_sold"
+    NPC_BOUGHT = "npc_bought"
+    NPC_USED_ITEM = "npc_used_item"
+    TRADE_PROPOSED = "trade_proposed"
+    TRADE_ACCEPTED = "trade_accepted"
+    TRADE_REJECTED = "trade_rejected"
+    TRADE_COUNTERED = "trade_countered"
+    MARKET_UPDATED = "market_updated"
 
 
 @dataclass
@@ -108,6 +118,59 @@ class WorldEvent:
 
         elif et == EventType.GOD_COMMENTARY:
             return f"[上帝旁白] {p.get('commentary','')}"
+
+        elif et == EventType.NPC_CRAFTED:
+            return f"{actor_name} 制造了 {p.get('qty',1)} 个 {p.get('item','?')}"
+
+        elif et == EventType.NPC_SOLD:
+            return (f"{actor_name} 在市场卖出 {p.get('qty',0)} {p.get('item','?')}, "
+                    f"获得 {p.get('gold',0):.1f} 金币 (单价{p.get('price',0):.1f})")
+
+        elif et == EventType.NPC_BOUGHT:
+            return (f"{actor_name} 在市场买入 {p.get('qty',0)} {p.get('item','?')}, "
+                    f"花费 {p.get('gold',0):.1f} 金币 (单价{p.get('price',0):.1f})")
+
+        elif et == EventType.NPC_USED_ITEM:
+            return f"{actor_name} 使用了 {p.get('item','?')} — {p.get('effect','')}"
+
+        elif et == EventType.TRADE_PROPOSED:
+            target_name = ""
+            tid = p.get("target_id")
+            if tid:
+                tn = world.get_npc(tid)
+                target_name = tn.name if tn else tid
+            return (f"{actor_name} 向 {target_name} 提议: "
+                    f"给出 {p.get('offer_qty',0)}{p.get('offer_item','?')}, "
+                    f"换取 {p.get('request_qty',0)}{p.get('request_item','?')}")
+
+        elif et == EventType.TRADE_ACCEPTED:
+            from_name = ""
+            fid = p.get("from_id")
+            if fid:
+                fn = world.get_npc(fid)
+                from_name = fn.name if fn else fid
+            return f"{actor_name} 接受了 {from_name} 的交易提案"
+
+        elif et == EventType.TRADE_REJECTED:
+            from_name = ""
+            fid = p.get("from_id")
+            if fid:
+                fn = world.get_npc(fid)
+                from_name = fn.name if fn else fid
+            return f"{actor_name} 拒绝了 {from_name} 的交易提案"
+
+        elif et == EventType.TRADE_COUNTERED:
+            from_name = ""
+            fid = p.get("from_id")
+            if fid:
+                fn = world.get_npc(fid)
+                from_name = fn.name if fn else fid
+            return (f"{actor_name} 向 {from_name} 反提案: "
+                    f"给出 {p.get('offer_qty',0)}{p.get('offer_item','?')}, "
+                    f"换取 {p.get('request_qty',0)}{p.get('request_item','?')}")
+
+        elif et == EventType.MARKET_UPDATED:
+            return f"[市场] 价格已更新 (Tick {p.get('tick',0)})"
 
         elif et == EventType.PLAYER_MOVED:
             return f"[玩家] {p.get('name', actor_name)} 移动到 ({self.origin_x},{self.origin_y})"

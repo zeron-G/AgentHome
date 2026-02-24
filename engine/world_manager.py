@@ -7,7 +7,7 @@ from typing import Optional
 import config
 from engine.world import (
     GodEntity, Inventory, NPC, Player, Resource, ResourceType,
-    TileType, WeatherType, World,
+    TileType, WeatherType, World, MarketPrice,
 )
 from game.events import EventBus, EventType, WorldEvent
 
@@ -16,6 +16,78 @@ class WorldManager:
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
         self._rng = random.Random()
+
+    # ── Market update ──────────────────────────────────────────────────────────
+
+    def update_market(self, world: World) -> Optional[WorldEvent]:
+        """Recalculate floating prices. Called every MARKET_UPDATE_INTERVAL ticks."""
+        tick = world.time.tick
+        market = world.market
+
+        # Count supply on the map + in NPC inventories
+        supply: dict[str, float] = {item: 0.0 for item in config.MARKET_BASE_PRICES}
+        for row in world.tiles:
+            for tile in row:
+                if tile.resource:
+                    rt = tile.resource.resource_type.value
+                    if rt in supply:
+                        supply[rt] += tile.resource.quantity
+
+        for npc in world.npcs:
+            inv = npc.inventory
+            for item in supply:
+                supply[item] += inv.get(item)
+
+        # Demand proxy: how many NPCs are low on each resource
+        demand: dict[str, float] = {item: 1.0 for item in config.MARKET_BASE_PRICES}
+        for npc in world.npcs:
+            inv = npc.inventory
+            # Low food → demand food more
+            if inv.food < 3:
+                demand["food"] = demand.get("food", 1.0) + 2.0
+            # Low energy → demand potions / bread
+            if npc.energy < 40:
+                demand["potion"] = demand.get("potion", 1.0) + 1.5
+                demand["bread"] = demand.get("bread", 1.0) + 1.0
+
+        # Weather modifier
+        weather = world.weather
+        weather_mod: dict[str, float] = {}
+        if weather == WeatherType.STORM:
+            weather_mod["food"] = 1.4
+            weather_mod["herb"] = 0.7
+        elif weather == WeatherType.RAINY:
+            weather_mod["herb"] = 1.2
+            weather_mod["wood"] = 1.1
+
+        for item, mp in market.prices.items():
+            s = max(supply.get(item, 0) + 1, 1)     # avoid /0
+            d = demand.get(item, 1.0)
+            wmod = weather_mod.get(item, 1.0)
+            noise = 1.0 + self._rng.uniform(-config.MARKET_VOLATILITY, config.MARKET_VOLATILITY)
+
+            target = mp.base * (d / (s / 10)) * wmod * noise
+            target = max(mp.min_p, min(mp.max_p, target))
+
+            # Exponential smoothing
+            new_current = round(
+                mp.current * (1 - config.MARKET_SMOOTHING) + target * config.MARKET_SMOOTHING, 2
+            )
+            mp.current = new_current
+
+            # Record history (keep last 30)
+            hist = market.history.setdefault(item, [])
+            hist.append(new_current)
+            if len(hist) > 30:
+                hist.pop(0)
+
+        market.last_update_tick = tick
+
+        return WorldEvent(
+            event_type=EventType.MARKET_UPDATED,
+            tick=tick,
+            payload={"tick": tick},
+        )
 
     # ── Passive effects (called every world tick) ─────────────────────────────
 
@@ -42,6 +114,12 @@ class WorldManager:
             if npc.energy == 0 and npc.inventory.food > 0:
                 npc.inventory.food -= 1
                 npc.energy = min(100, npc.energy + config.FOOD_ENERGY_RESTORE)
+
+            # Expire pending proposals older than 10 ticks
+            npc.pending_proposals = [
+                p for p in npc.pending_proposals
+                if tick - p.get("tick", 0) <= 10
+            ]
 
         # Energy drain for player too
         if world.player:
@@ -121,6 +199,30 @@ class WorldManager:
         elif action_type == "buy_food":
             events.extend(self._do_buy_food(npc, action, world, tick))
 
+        elif action_type == "craft":
+            events.extend(self._do_craft(npc, action, world, tick))
+
+        elif action_type == "sell":
+            events.extend(self._do_sell(npc, action, world, tick))
+
+        elif action_type == "buy":
+            events.extend(self._do_buy(npc, action, world, tick))
+
+        elif action_type == "use_item":
+            events.extend(self._do_use_item(npc, action, world, tick))
+
+        elif action_type == "propose_trade":
+            events.extend(self._do_propose_trade(npc, action, world, tick))
+
+        elif action_type == "accept_trade":
+            events.extend(self._do_accept_trade(npc, action, world, tick))
+
+        elif action_type == "reject_trade":
+            events.extend(self._do_reject_trade(npc, action, world, tick))
+
+        elif action_type == "counter_trade":
+            events.extend(self._do_counter_trade(npc, action, world, tick))
+
         else:
             npc.last_action = "idle"
 
@@ -151,6 +253,9 @@ class WorldManager:
         new_tile.npc_ids.append(npc.npc_id)
 
         energy_cost = 3 if world.weather == WeatherType.STORM else 2
+        if npc.active_rope:
+            rope_save = config.ITEM_EFFECTS.get("rope", {}).get("move_energy_save", 0)
+            energy_cost = max(0, energy_cost - rope_save)
         npc.energy = max(0, npc.energy - energy_cost)
         npc.last_action = "move"
 
@@ -173,11 +278,16 @@ class WorldManager:
         if tile.tile_type == TileType.TOWN:
             return []
 
-        amount = min(2, tile.resource.quantity)
+        base_amount = 2
+        if npc.active_tool:
+            base_amount *= config.ITEM_EFFECTS.get("tool", {}).get("gather_bonus", 1)
+        amount = min(base_amount, tile.resource.quantity)
         tile.resource.quantity -= amount
 
         if rtype == ResourceType.FOOD:
             npc.inventory.food = npc.inventory.food + amount
+        elif rtype == ResourceType.HERB:
+            npc.inventory.herb += amount
         else:
             npc.inventory.set(rtype.value, npc.inventory.get(rtype.value) + amount)
 
@@ -382,6 +492,339 @@ class WorldManager:
             origin_y=npc.y,
             radius=4,
             payload={"qty": qty, "gold_spent": cost},
+        )]
+
+    def _do_craft(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Craft an item from a recipe."""
+        item = action.get("craft_item", "").strip()
+        recipe = config.CRAFTING_RECIPES.get(item)
+        if not recipe:
+            return []
+
+        # Check materials
+        for mat, needed in recipe.items():
+            if npc.inventory.get(mat) < needed:
+                return []
+
+        # Consume materials
+        for mat, needed in recipe.items():
+            npc.inventory.set(mat, npc.inventory.get(mat) - needed)
+
+        # Produce item
+        npc.inventory.set(item, npc.inventory.get(item) + 1)
+        npc.last_action = "craft"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_CRAFTED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=3,
+            payload={"item": item, "qty": 1},
+        )]
+
+    def _do_sell(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Sell items at market price (must be at exchange)."""
+        tile = world.get_tile(npc.x, npc.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        item = action.get("sell_item", "").strip()
+        qty = int(action.get("sell_qty", 0) or 0)
+        if not item or qty <= 0:
+            return []
+
+        npc_has = npc.inventory.get(item)
+        qty = min(qty, npc_has)
+        if qty <= 0:
+            return []
+
+        # Use market price if available, else fall back to legacy exchange rates
+        mp = world.market.prices.get(item)
+        if mp:
+            price = mp.current
+        else:
+            rates = {"wood": config.EXCHANGE_RATE_WOOD, "stone": config.EXCHANGE_RATE_STONE,
+                     "ore": config.EXCHANGE_RATE_ORE}
+            price = rates.get(item, 1.0)
+
+        gold_earned = round(qty * price, 1)
+        npc.inventory.set(item, npc_has - qty)
+        npc.inventory.gold = round(npc.inventory.gold + gold_earned, 1)
+        npc.last_action = "sell"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_SOLD,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=4,
+            payload={"item": item, "qty": qty, "gold": gold_earned, "price": price},
+        )]
+
+    def _do_buy(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Buy items at market price (must be at exchange)."""
+        tile = world.get_tile(npc.x, npc.y)
+        if not tile or not tile.is_exchange:
+            return []
+
+        item = action.get("buy_item", "").strip()
+        qty = int(action.get("buy_qty", 0) or 0)
+        if not item or qty <= 0:
+            return []
+
+        mp = world.market.prices.get(item)
+        if not mp:
+            # Fallback: food only
+            if item == "food":
+                return self._do_buy_food(npc, {"quantity": qty}, world, tick)
+            return []
+
+        total_cost = round(qty * mp.current, 1)
+        if npc.inventory.gold < total_cost:
+            # Buy as many as affordable
+            qty = int(npc.inventory.gold / mp.current)
+            total_cost = round(qty * mp.current, 1)
+        if qty <= 0:
+            return []
+
+        npc.inventory.gold = round(npc.inventory.gold - total_cost, 1)
+        npc.inventory.set(item, npc.inventory.get(item) + qty)
+        npc.last_action = "buy"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_BOUGHT,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=4,
+            payload={"item": item, "qty": qty, "gold": total_cost, "price": mp.current},
+        )]
+
+    def _do_use_item(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Use a consumable or equip a tool/rope."""
+        item = action.get("use_item", "").strip()
+        if not item or npc.inventory.get(item) <= 0:
+            return []
+
+        effects = config.ITEM_EFFECTS.get(item, {})
+        effect_desc = ""
+
+        if "energy" in effects:
+            restore = effects["energy"]
+            npc.energy = min(100, npc.energy + restore)
+            npc.inventory.set(item, npc.inventory.get(item) - 1)
+            effect_desc = f"恢复{restore}体力"
+        elif "gather_bonus" in effects:
+            # Equip tool — consumed on use
+            npc.active_tool = True
+            npc.inventory.set(item, npc.inventory.get(item) - 1)
+            effect_desc = f"采集效率×{effects['gather_bonus']}"
+        elif "move_energy_save" in effects:
+            # Equip rope — consumed on use
+            npc.active_rope = True
+            npc.inventory.set(item, npc.inventory.get(item) - 1)
+            effect_desc = f"移动体力消耗-{effects['move_energy_save']}"
+
+        if not effect_desc:
+            return []
+
+        npc.last_action = "use_item"
+
+        return [WorldEvent(
+            event_type=EventType.NPC_USED_ITEM,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=2,
+            payload={"item": item, "effect": effect_desc},
+        )]
+
+    def _do_propose_trade(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Send a trade proposal to a nearby NPC."""
+        target_id = action.get("target_id", "")
+        target_npc = world.get_npc(target_id)
+        if not target_npc:
+            return []
+
+        dist = abs(target_npc.x - npc.x) + abs(target_npc.y - npc.y)
+        if dist > config.NPC_ADJACENT_RADIUS + 2:  # allow a bit more range for proposals
+            return []
+
+        offer_item = action.get("offer_item", "")
+        offer_qty = int(action.get("offer_qty", 0) or 0)
+        request_item = action.get("request_item", "")
+        request_qty = int(action.get("request_qty", 0) or 0)
+        if not offer_item or not request_item or offer_qty <= 0 or request_qty <= 0:
+            return []
+
+        # Verify proposer has what they're offering
+        if npc.inventory.get(offer_item) < offer_qty:
+            return []
+
+        proposal = {
+            "from_id": npc.npc_id,
+            "offer_item": offer_item,
+            "offer_qty": offer_qty,
+            "request_item": request_item,
+            "request_qty": request_qty,
+            "tick": tick,
+            "round": 1,
+        }
+        target_npc.pending_proposals.append(proposal)
+        npc.last_action = "propose_trade"
+
+        return [WorldEvent(
+            event_type=EventType.TRADE_PROPOSED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=5,
+            payload={
+                "target_id": target_id,
+                "offer_item": offer_item, "offer_qty": offer_qty,
+                "request_item": request_item, "request_qty": request_qty,
+            },
+        )]
+
+    def _find_proposal(self, npc: NPC, action: dict) -> Optional[dict]:
+        """Find the pending proposal from proposal_from or the oldest one."""
+        from_id = action.get("proposal_from", "").strip()
+        if from_id:
+            for p in npc.pending_proposals:
+                if p.get("from_id") == from_id:
+                    return p
+        if npc.pending_proposals:
+            return npc.pending_proposals[0]
+        return None
+
+    def _do_accept_trade(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Accept a pending trade proposal."""
+        proposal = self._find_proposal(npc, action)
+        if not proposal:
+            return []
+
+        from_id = proposal["from_id"]
+        from_npc = world.get_npc(from_id)
+        if not from_npc:
+            npc.pending_proposals.remove(proposal)
+            return []
+
+        # Verify both parties still have the items
+        give_item = proposal["request_item"]   # npc gives this
+        give_qty = proposal["request_qty"]
+        recv_item = proposal["offer_item"]     # npc receives this
+        recv_qty = proposal["offer_qty"]
+
+        if (npc.inventory.get(give_item) < give_qty or
+                from_npc.inventory.get(recv_item) < recv_qty):
+            npc.pending_proposals.remove(proposal)
+            return []
+
+        # Execute
+        npc.inventory.set(give_item, npc.inventory.get(give_item) - give_qty)
+        npc.inventory.set(recv_item, npc.inventory.get(recv_item) + recv_qty)
+        from_npc.inventory.set(recv_item, from_npc.inventory.get(recv_item) - recv_qty)
+        from_npc.inventory.set(give_item, from_npc.inventory.get(give_item) + give_qty)
+
+        npc.pending_proposals.remove(proposal)
+        npc.last_action = "accept_trade"
+        from_npc.last_action = "trade"
+
+        return [WorldEvent(
+            event_type=EventType.TRADE_ACCEPTED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=5,
+            payload={"from_id": from_id, "give_item": give_item, "give_qty": give_qty,
+                     "recv_item": recv_item, "recv_qty": recv_qty},
+        )]
+
+    def _do_reject_trade(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Reject a pending trade proposal and notify proposer."""
+        proposal = self._find_proposal(npc, action)
+        if not proposal:
+            return []
+
+        from_id = proposal["from_id"]
+        from_npc = world.get_npc(from_id)
+        npc.pending_proposals.remove(proposal)
+        npc.last_action = "reject_trade"
+
+        # Notify proposer via inbox
+        if from_npc:
+            from_npc.memory.add_to_inbox(
+                f"{npc.name} 拒绝了你提出的交易 "
+                f"({proposal['offer_qty']}{proposal['offer_item']}↔"
+                f"{proposal['request_qty']}{proposal['request_item']})"
+            )
+
+        return [WorldEvent(
+            event_type=EventType.TRADE_REJECTED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=5,
+            payload={"from_id": from_id},
+        )]
+
+    def _do_counter_trade(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Counter a pending proposal with different terms."""
+        proposal = self._find_proposal(npc, action)
+        if not proposal:
+            return []
+
+        from_id = proposal["from_id"]
+        from_npc = world.get_npc(from_id)
+        npc.pending_proposals.remove(proposal)
+
+        offer_item = action.get("offer_item", "")
+        offer_qty = int(action.get("offer_qty", 0) or 0)
+        request_item = action.get("request_item", "")
+        request_qty = int(action.get("request_qty", 0) or 0)
+
+        if not offer_item or not request_item or offer_qty <= 0 or request_qty <= 0:
+            return []
+
+        # Verify counter-proposer has what they're offering
+        if npc.inventory.get(offer_item) < offer_qty:
+            return []
+
+        npc.last_action = "counter_trade"
+
+        # Send counter proposal to original proposer
+        if from_npc:
+            counter = {
+                "from_id": npc.npc_id,
+                "offer_item": offer_item,
+                "offer_qty": offer_qty,
+                "request_item": request_item,
+                "request_qty": request_qty,
+                "tick": tick,
+                "round": proposal.get("round", 1) + 1,
+            }
+            from_npc.pending_proposals.append(counter)
+
+        return [WorldEvent(
+            event_type=EventType.TRADE_COUNTERED,
+            tick=tick,
+            actor_id=npc.npc_id,
+            origin_x=npc.x,
+            origin_y=npc.y,
+            radius=5,
+            payload={
+                "from_id": from_id,
+                "offer_item": offer_item, "offer_qty": offer_qty,
+                "request_item": request_item, "request_qty": request_qty,
+            },
         )]
 
     # ── Player actions ─────────────────────────────────────────────────────────

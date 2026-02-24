@@ -94,7 +94,7 @@ agenthome/
 │   └── serializer.py    # World → 紧凑 JSON
 │
 ├── frontend/
-│   └── index.html       # 单文件前端（Canvas + 3 标签面板 + 聊天日志）
+│   └── index.html       # 单文件前端（Canvas + 5 选项卡面板：世界、经济、NPC、地图编辑器、设置）
 │
 └── docs/                # 详细文档
     ├── architecture.md  # 架构设计与并发模型

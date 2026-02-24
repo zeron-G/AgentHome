@@ -19,6 +19,7 @@ _RESOURCE_LETTER = {
     ResourceType.STONE: "s",
     ResourceType.ORE: "o",
     ResourceType.FOOD: "f",
+    ResourceType.HERB: "h",
 }
 
 
@@ -50,6 +51,7 @@ class WorldSerializer:
             "events": [e.to_dict(world) for e in (events or [])],
             "token_usage": token_tracker.snapshot(),
             "settings": self._serialize_settings(),
+            "market": self._serialize_market(world),
         }
 
         # Include player if present
@@ -90,21 +92,29 @@ class WorldSerializer:
             "y": npc.y,
             "color": npc.color,
             "energy": npc.energy,
-            "inventory": {
-                "wood": npc.inventory.wood,
-                "stone": npc.inventory.stone,
-                "ore": npc.inventory.ore,
-                "food": npc.inventory.food,
-                "gold": npc.inventory.gold,
-            },
+            "inventory": npc.inventory.to_dict(),
             "last_action": npc.last_action,
             "last_message": npc.last_message,
             "last_message_tick": npc.last_message_tick,
             "is_processing": npc.is_processing,
+            "active_tool": getattr(npc, "active_tool", False),
+            "active_rope": getattr(npc, "active_rope", False),
+            "pending_proposals": len(getattr(npc, "pending_proposals", [])),
         }
         # Conditionally include inner thought
         if config.SHOW_NPC_THOUGHTS and getattr(npc, "last_thought", ""):
             d["thought"] = npc.last_thought
+        # Include profile summary if available
+        prof = getattr(npc, "profile", None)
+        if prof:
+            d["profile"] = {
+                "title": prof.title,
+                "backstory": prof.backstory,
+                "personality": prof.personality,
+                "goals": list(prof.goals),
+                "speech_style": prof.speech_style,
+                "relationships": dict(prof.relationships),
+            }
         return d
 
     def _serialize_player(self, player) -> dict:
@@ -117,14 +127,27 @@ class WorldSerializer:
             "is_god_mode": player.is_god_mode,
             "last_action": player.last_action,
             "last_message": player.last_message,
-            "inventory": {
-                "wood": player.inventory.wood,
-                "stone": player.inventory.stone,
-                "ore": player.inventory.ore,
-                "food": player.inventory.food,
-                "gold": player.inventory.gold,
-            },
+            "inventory": player.inventory.to_dict(),
             "inbox": list(player.inbox[-10:]),  # last 10 messages
+        }
+
+    def _serialize_market(self, world: World) -> dict:
+        """Serialize market prices and history for the economy panel."""
+        market = world.market
+        prices = {}
+        for item, mp in market.prices.items():
+            prices[item] = {
+                "base": mp.base,
+                "current": round(mp.current, 2),
+                "min": mp.min_p,
+                "max": mp.max_p,
+                "trend": mp.trend,
+                "change_pct": mp.change_pct,
+            }
+        return {
+            "prices": prices,
+            "history": {item: list(hist) for item, hist in market.history.items()},
+            "last_update_tick": market.last_update_tick,
         }
 
     def _serialize_settings(self) -> dict:

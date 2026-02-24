@@ -6,6 +6,43 @@ load_dotenv()
 # LLM provider: "gemini" (cloud) or "local" (OpenAI-compatible local server)
 LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")
 
+# ── Market System ─────────────────────────────────────────────────────────────
+
+# Base prices (gold per item) — starting point before supply/demand shifts
+MARKET_BASE_PRICES: dict = {
+    "wood":   1.5,
+    "stone":  2.5,
+    "ore":    6.0,
+    "food":   3.0,
+    "herb":   4.0,
+    "rope":   4.0,
+    "potion": 10.0,
+    "tool":   8.0,
+    "bread":  6.0,
+}
+MARKET_UPDATE_INTERVAL: int = 5      # ticks between price updates
+MARKET_VOLATILITY: float = 0.15      # max random price swing ±%
+MARKET_SMOOTHING: float = 0.3        # price responsiveness (0=frozen, 1=instant)
+MARKET_PRICE_MIN_RATIO: float = 0.3  # floor = base × 0.3
+MARKET_PRICE_MAX_RATIO: float = 3.0  # ceiling = base × 3.0
+
+# ── Crafting System ───────────────────────────────────────────────────────────
+
+CRAFTING_RECIPES: dict = {
+    "rope":   {"wood": 2},
+    "potion": {"herb": 2},
+    "tool":   {"stone": 1, "wood": 1},
+    "bread":  {"food": 2},
+}
+
+# Effects when items are used (via use_item action)
+ITEM_EFFECTS: dict = {
+    "potion": {"energy": 60},
+    "bread":  {"energy": 50},
+    "tool":   {"gather_bonus": 2},      # gather yields ×2 while held
+    "rope":   {"move_energy_save": 1},  # move costs 1 less energy
+}
+
 # Gemini (cloud)
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 MODEL_NAME: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")

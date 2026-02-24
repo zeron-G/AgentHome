@@ -267,6 +267,13 @@ class GameLoop:
                     await asyncio.sleep(config.WORLD_TICK_SECONDS)
                     continue
 
+            # Spawn dialogue option generation tasks if needed
+            if getattr(self.world, "_pending_dialogue_option_gen", False) and self.world.player:
+                self.world._pending_dialogue_option_gen = False
+                for dialogue in list(self.world.player.dialogue_queue):
+                    if dialogue.get("reply_options") is None:
+                        asyncio.create_task(self._fill_dialogue_options(dialogue))
+
             await self._broadcast()
             await asyncio.sleep(config.WORLD_TICK_SECONDS)
 
@@ -341,6 +348,19 @@ class GameLoop:
             self.world, self.token_tracker, [], self._simulation_running
         )
         await self.ws_manager.broadcast(snapshot)
+
+    async def _fill_dialogue_options(self, dialogue: dict):
+        """Async task: call GodAgent to generate quick-reply options for a player dialogue."""
+        try:
+            options = await self.god_agent.generate_dialogue_options(
+                dialogue["from_name"], dialogue["message"], self.world
+            )
+            dialogue["reply_options"] = options
+            # Broadcast updated player state (dialogue_queue now has options)
+            await self._broadcast_with_events([])
+        except Exception as e:
+            logger.warning(f"[GameLoop] _fill_dialogue_options error: {e}")
+            dialogue["reply_options"] = ["好的，继续说", "我没有兴趣", "能详细说说吗？"]
 
     async def _broadcast_with_events(self, events: list[WorldEvent]):
         snapshot = self.serializer.world_snapshot(

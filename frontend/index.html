@@ -184,6 +184,28 @@ textarea{resize:vertical;min-height:60px}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#333355;border-radius:3px}
+
+/* ─── DIALOGUE MODAL ─── */
+#dialogue-modal{position:fixed;right:16px;bottom:80px;width:320px;background:var(--panel);border:1px solid var(--teal);border-radius:12px;padding:14px;z-index:150;display:none;box-shadow:0 4px 24px rgba(0,0,0,.6)}
+#dialogue-modal.open{display:block}
+.dialogue-from{font-size:12px;color:var(--teal);font-weight:700;margin-bottom:4px}
+.dialogue-msg{font-size:13px;color:var(--text);background:var(--card);border-radius:8px;padding:8px;margin-bottom:10px;line-height:1.5}
+.dialogue-options{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+.dialogue-opt{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;text-align:left;cursor:pointer;transition:all .15s}
+.dialogue-opt:hover{border-color:var(--teal);color:var(--teal)}
+.dialogue-custom{display:flex;gap:6px;margin-top:4px}
+.dialogue-custom input{flex:1;font-size:12px}
+.dialogue-loading{color:var(--muted);font-size:12px;font-style:italic;padding:4px 0}
+
+/* ─── PLAYER EQUIPMENT ─── */
+.eq-badge{display:inline-flex;align-items:center;gap:3px;background:rgba(78,204,163,.15);border:1px solid rgba(78,204,163,.3);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--teal);white-space:nowrap}
+.inv-badge{display:inline-flex;align-items:center;gap:3px;background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.25);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--gold);white-space:nowrap}
+.action-btns{display:flex;gap:4px;flex-wrap:wrap}
+.action-btns button{font-size:11px;padding:4px 9px;border-radius:5px;background:var(--card);border:1px solid var(--border);color:var(--text);cursor:pointer;white-space:nowrap}
+.action-btns button:hover{border-color:var(--teal);color:var(--teal)}
+
+/* ─── FURNITURE ICONS on NPC card ─── */
+.furniture-icon{font-size:10px;color:#aaffaa}
 </style>
 </head>
 <body>
@@ -446,6 +468,8 @@ textarea{resize:vertical;min-height:60px}
     <div class="player-stat">👤 <b id="pname">Player</b></div>
     <div class="player-stat">❤️ <b id="penergy">100</b></div>
     <div class="player-stat">📍 <b id="ppos">(9,9)</b></div>
+    <span class="eq-badge" id="p-equipped-badge" title="装备槽">⚔ 空</span>
+    <span class="inv-badge" id="p-inv-badge" title="背包">🎒 0/20</span>
     <div class="dpad">
       <div class="blank"></div>
       <button onclick="playerMove(0,-1)" title="上 (W/↑)">▲</button>
@@ -457,9 +481,18 @@ textarea{resize:vertical;min-height:60px}
       <button onclick="playerMove(0,1)" title="下 (S/↓)">▼</button>
       <div class="blank"></div>
     </div>
-    <button class="btn-ghost" style="font-size:12px" onclick="sendWS({type:'player_action',action:'gather'})">⛏ 采集</button>
-    <button class="btn-ghost" style="font-size:12px" onclick="sendWS({type:'player_action',action:'eat'})">🍎 吃</button>
+    <div class="action-btns">
+      <button onclick="sendWS({type:'player_action',action:'gather'})" title="(G)">⛏ 采集</button>
+      <button onclick="sendWS({type:'player_action',action:'eat'})" title="(F)">🍎 吃</button>
+      <button onclick="sendWS({type:'player_action',action:'rest'})" title="休息">💤 休息</button>
+      <button onclick="showCraftPanel()" title="制造">🔨 制造</button>
+      <button onclick="showEquipPanel()" title="装备">⚔ 装备</button>
+      <button onclick="showBuildPanel()" title="建造">🏗 建造</button>
+    </div>
     <div class="talk-wrap">
+      <select id="player-talk-target" style="width:90px;font-size:12px">
+        <option value="">广播</option>
+      </select>
       <input id="player-talk-input" placeholder="说话…" onkeydown="if(event.key==='Enter')playerTalk()">
       <button class="btn-ghost" style="font-size:12px" onclick="playerTalk()">发送</button>
     </div>
@@ -475,6 +508,20 @@ textarea{resize:vertical;min-height:60px}
       </div>
     </div>
     <div id="event-log"></div>
+  </div>
+
+  <!-- DIALOGUE MODAL -->
+  <div id="dialogue-modal">
+    <div class="dialogue-from" id="dlg-from">💬 NPC</div>
+    <div class="dialogue-msg" id="dlg-msg"></div>
+    <div class="dialogue-options" id="dlg-options">
+      <div class="dialogue-loading">⏳ 生成回复选项中…</div>
+    </div>
+    <div class="dialogue-custom">
+      <input id="dlg-custom-input" placeholder="自定义回复…" onkeydown="if(event.key==='Enter')sendDialogueCustom()">
+      <button class="btn-primary" style="font-size:12px;padding:4px 10px" onclick="sendDialogueCustom()">发送</button>
+      <button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="dismissDialogue()">✕</button>
+    </div>
   </div>
 
 </div><!-- /game-screen -->
@@ -712,6 +759,12 @@ function renderCanvas(){
       ctx.fillStyle=pct>.5?'#4caf50':pct>.2?'#ff9800':'#f44336'; ctx.fillRect(px+TS-11,py+2,9*pct,4);
     }
     if(tile.e){ ctx.font=`bold 9px sans-serif`; ctx.fillStyle='#f5a623'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText('E',px+TS/2,py+TS-1); }
+    // Furniture icons
+    if(tile.f){
+      const fi={bed:'🛏',table:'🪵',chair:'🪑'}[tile.f]||'?';
+      ctx.font=`${TS*.32}px serif`; ctx.textAlign='right'; ctx.textBaseline='bottom';
+      ctx.fillText(fi,px+TS-1,py+TS-1);
+    }
   });
   // NPCs
   (world.npcs||[]).forEach(npc=>drawNPC(ctx,npc,world.tick));
@@ -835,7 +888,7 @@ function renderNPCs(npcs){
         ${npc.pending_proposals>0?`<span class="proposal-badge">📨${npc.pending_proposals}</span>`:''}
       </div>
       <div class="energy-bar-wrap">
-        <div class="energy-label">体力 ${npc.energy}/100 ${npc.active_tool?'🔧':''}${npc.active_rope?'🪢':''}</div>
+        <div class="energy-label">体力 ${npc.energy}/100 ${npc.equipped?`<span style="font-size:10px;color:var(--teal)">⚔${npc.equipped}</span>`:''} <span style="font-size:10px;color:var(--gold)">${npc.inv_count||0}/${npc.inv_max||20}格</span></div>
         <div class="energy-track"><div class="energy-fill" style="width:${ep}%;background:${ec}"></div></div>
       </div>
       ${npc.last_message?`<div class="last-msg" title="${escH(npc.last_message)}">"${escH(npc.last_message.slice(0,50))}${npc.last_message.length>50?'…':''}"</div>`:''}
@@ -956,19 +1009,110 @@ function updatePlayerBar(player){
   document.getElementById('pname').textContent=player.name||'Player';
   document.getElementById('penergy').textContent=player.energy??100;
   document.getElementById('ppos').textContent=`(${player.x},${player.y})`;
+  // Equipped badge
+  const eb=document.getElementById('p-equipped-badge');
+  if(eb) eb.textContent=player.equipped?`⚔ ${player.equipped}`:'⚔ 空';
+  // Inventory badge
+  const ib=document.getElementById('p-inv-badge');
+  if(ib) ib.textContent=`🎒 ${player.inv_count||0}/${player.inv_max||20}`;
+  // Populate talk target dropdown
+  const sel=document.getElementById('player-talk-target');
+  if(sel&&S.world){
+    const prev=sel.value;
+    sel.innerHTML='<option value="">广播</option>'+(S.world.npcs||[]).map(n=>`<option value="${n.id}">${escH(n.name)}</option>`).join('');
+    if(prev) sel.value=prev;
+  }
+  // Dialogue popup
+  updateDialogueModal(player.dialogue);
 }
 function playerMove(dx,dy){ sendWS({type:'player_action',action:'move',dx,dy}); }
-function playerTalk(){ const inp=document.getElementById('player-talk-input'); const msg=inp.value.trim(); if(!msg) return; sendWS({type:'player_action',action:'talk',message:msg,target_id:null}); inp.value=''; }
+function playerTalk(){
+  const inp=document.getElementById('player-talk-input');
+  const msg=inp.value.trim(); if(!msg) return;
+  const target=document.getElementById('player-talk-target')?.value||null;
+  sendWS({type:'player_action',action:'talk',message:msg,target_id:target||null});
+  inp.value='';
+}
+
+// ════════ DIALOGUE MODAL ════════
+let _currentDlgFromId=null;
+function updateDialogueModal(dialogue){
+  const modal=document.getElementById('dialogue-modal'); if(!modal) return;
+  if(!dialogue){ modal.classList.remove('open'); _currentDlgFromId=null; return; }
+  _currentDlgFromId=dialogue.from_id;
+  modal.classList.add('open');
+  document.getElementById('dlg-from').textContent=`💬 ${dialogue.from_name} 说:`;
+  document.getElementById('dlg-msg').textContent=dialogue.message;
+  const optEl=document.getElementById('dlg-options');
+  if(dialogue.reply_options&&dialogue.reply_options.length>0){
+    const labels=['A','B','C','D'];
+    optEl.innerHTML=dialogue.reply_options.map((opt,i)=>`<button class="dialogue-opt" onclick="replyDialogue(${JSON.stringify(opt)})">[${labels[i]||i+1}] ${escH(opt)}</button>`).join('');
+  } else {
+    optEl.innerHTML='<div class="dialogue-loading">⏳ 正在生成回复选项…</div>';
+  }
+}
+function replyDialogue(msg){
+  if(!_currentDlgFromId) return;
+  sendWS({type:'player_action',action:'dialogue_reply',to_npc_id:_currentDlgFromId,message:msg});
+  document.getElementById('dialogue-modal').classList.remove('open');
+  _currentDlgFromId=null;
+}
+function sendDialogueCustom(){
+  const inp=document.getElementById('dlg-custom-input');
+  const msg=inp.value.trim(); if(!msg) return;
+  replyDialogue(msg); inp.value='';
+}
+function dismissDialogue(){
+  document.getElementById('dialogue-modal').classList.remove('open');
+  _currentDlgFromId=null;
+}
+
+// ════════ PLAYER QUICK ACTIONS ════════
+function showCraftPanel(){
+  const inv=S.world?.player?.inventory||{};
+  const recipes={rope:{wood:2},potion:{herb:2},tool:{stone:1,wood:1},bread:{food:2}};
+  const canCraft=Object.entries(recipes).filter(([item,req])=>Object.entries(req).every(([m,q])=>(inv[m]||0)>=q));
+  if(!canCraft.length){ alert('背包中没有足够的材料制造任何物品'); return; }
+  const choice=prompt('选择制造物品:\n'+canCraft.map(([item,req],i)=>`${i+1}. ${item} (需要: ${Object.entries(req).map(([m,q])=>q+m).join('+')})`).join('\n')+'\n\n输入序号:');
+  const idx=parseInt(choice)-1;
+  if(idx>=0&&idx<canCraft.length) sendWS({type:'player_action',action:'craft',craft_item:canCraft[idx][0]});
+}
+function showEquipPanel(){
+  const inv=S.world?.player?.inventory||{};
+  const equipped=S.world?.player?.equipped;
+  const items=[];
+  if((inv.tool||0)>0) items.push(['tool','工具 (采集×2)']);
+  if((inv.rope||0)>0) items.push(['rope','绳索 (移动体力-1)']);
+  if(equipped) items.push(['__unequip__',`卸下当前装备 (${equipped})`]);
+  if(!items.length){ alert('没有可装备的物品'); return; }
+  const choice=prompt('选择装备:\n'+items.map(([k,v],i)=>`${i+1}. ${v}`).join('\n')+'\n\n输入序号:');
+  const idx=parseInt(choice)-1;
+  if(idx>=0&&idx<items.length){
+    const [item]=items[idx];
+    if(item==='__unequip__') sendWS({type:'player_action',action:'unequip'});
+    else sendWS({type:'player_action',action:'use_item',use_item:item});
+  }
+}
+function showBuildPanel(){
+  const inv=S.world?.player?.inventory||{};
+  const recipes={bed:{wood:4},table:{wood:3},chair:{wood:2}};
+  const effects={bed:'睡眠+80体力',table:'制造×2',chair:'休息+35体力'};
+  const canBuild=Object.entries(recipes).filter(([f,req])=>Object.entries(req).every(([m,q])=>(inv[m]||0)>=q));
+  if(!canBuild.length){ alert(`没有足够木头建造家具（床需4木，桌需3木，椅需2木）`); return; }
+  const choice=prompt('选择建造:\n'+canBuild.map(([f,req],i)=>`${i+1}. ${f} (需要: ${Object.entries(req).map(([m,q])=>q+m).join('+')} → ${effects[f]||''})`).join('\n')+'\n\n输入序号:');
+  const idx=parseInt(choice)-1;
+  if(idx>=0&&idx<canBuild.length) sendWS({type:'player_action',action:'build',build_furniture:canBuild[idx][0]});
+}
 
 // ════════ EVENT LOG ════════
-const LOG_CLASSES={npc_spoke:'log-talk',npc_traded:'log-trade',trade_accepted:'log-trade',npc_gathered:'log-gather',npc_crafted:'log-craft',npc_sold:'log-trade',npc_bought:'log-trade',weather_changed:'log-weather',market_updated:'log-market'};
+const LOG_CLASSES={npc_spoke:'log-talk',player_spoke:'log-talk',npc_traded:'log-trade',trade_accepted:'log-trade',trade_proposed:'log-trade',npc_gathered:'log-gather',player_gathered:'log-gather',npc_crafted:'log-craft',player_crafted:'log-craft',npc_sold:'log-trade',npc_bought:'log-trade',player_sold:'log-trade',player_bought:'log-trade',npc_equipped:'log-craft',player_equipped:'log-craft',furniture_built:'log-craft',weather_changed:'log-weather',market_updated:'log-market',player_dialogue_replied:'log-talk'};
 function processEvents(events){
   events.forEach(ev=>{
     if(!ev.summary) return;
     const cls=LOG_CLASSES[ev.type]||'log-default';
     addLog(ev.summary,cls);
-    if(['npc_sold','npc_bought','npc_crafted','trade_accepted'].includes(ev.type)){
-      const tcls=ev.type==='npc_sold'?'tli-sell':ev.type==='npc_bought'?'tli-buy':ev.type==='npc_crafted'?'tli-craft':'tli-accept';
+    if(['npc_sold','npc_bought','npc_crafted','trade_accepted','player_sold','player_bought','player_crafted','furniture_built'].includes(ev.type)){
+      const tcls=['npc_sold','player_sold'].includes(ev.type)?'tli-sell':['npc_bought','player_bought'].includes(ev.type)?'tli-buy':['npc_crafted','player_crafted','furniture_built'].includes(ev.type)?'tli-craft':'tli-accept';
       S.tradeLog.unshift({txt:ev.summary,cls:tcls});
       if(S.tradeLog.length>30) S.tradeLog.pop();
       if(S.activeTab==='eco') renderTradeLog();
@@ -1064,6 +1208,10 @@ document.addEventListener('keydown',e=>{
   if(moves[e.key]&&S.world?.player){ e.preventDefault(); playerMove(...moves[e.key]); }
   if(e.key==='g') sendWS({type:'player_action',action:'gather'});
   if(e.key==='f') sendWS({type:'player_action',action:'eat'});
+  if(e.key==='r') sendWS({type:'player_action',action:'rest'});
+  if(e.key==='c') showCraftPanel();
+  if(e.key==='e') showEquipPanel();
+  if(e.key==='b') showBuildPanel();
   if(e.key===' '){ e.preventDefault(); toggleSim(); }
 });
 

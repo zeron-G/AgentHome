@@ -47,6 +47,7 @@ class Tile:
     npc_ids: list = field(default_factory=list)
     is_exchange: bool = False   # marks the exchange building tile
     player_here: bool = False   # player occupies this tile
+    furniture: Optional[str] = None  # "bed" | "table" | "chair" | None
 
 
 @dataclass
@@ -102,6 +103,14 @@ class Inventory:
     def set(self, item: str, value: int):
         if hasattr(self, item):
             setattr(self, item, max(0, value))
+
+    def total_items(self) -> int:
+        """Count of all items that occupy inventory slots (gold excluded)."""
+        return self.wood + self.stone + self.ore + self.food + self.herb + \
+               self.rope + self.potion + self.tool + self.bread
+
+    def has_space(self, qty: int = 1) -> bool:
+        return self.total_items() + qty <= config.INVENTORY_MAX_SLOTS
 
     def to_dict(self) -> dict:
         return {
@@ -246,8 +255,7 @@ class NPC:
     last_thought: str = ""
     profile: Optional[NPCProfile] = None
     pending_proposals: list = field(default_factory=list)  # incoming trade proposals
-    active_tool: bool = False    # carrying tool → gather ×2
-    active_rope: bool = False    # using rope → move costs -1 energy
+    equipped: Optional[str] = None  # "tool" | "rope" | None (single equipment slot)
 
 
 @dataclass
@@ -263,6 +271,8 @@ class Player:
     last_action: str = "idle"
     last_message: str = ""
     inbox: list = field(default_factory=list)
+    equipped: Optional[str] = None  # "tool" | "rope" | None
+    dialogue_queue: list = field(default_factory=list)  # pending NPC→player dialogues
 
 
 @dataclass

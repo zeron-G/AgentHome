@@ -178,7 +178,11 @@ class WorldManager:
             events.extend(self._do_trade(npc, action, world, tick))
 
         elif action_type == "rest":
-            npc.energy = min(100, npc.energy + 20)
+            tile = world.get_tile(npc.x, npc.y)
+            rest_energy = 20
+            if tile and tile.furniture == "chair":
+                rest_energy = config.FURNITURE_EFFECTS.get("chair", {}).get("rest_energy", 35)
+            npc.energy = min(100, npc.energy + rest_energy)
             npc.last_action = "rest"
 
         elif action_type == "think":
@@ -223,6 +227,9 @@ class WorldManager:
         elif action_type == "counter_trade":
             events.extend(self._do_counter_trade(npc, action, world, tick))
 
+        elif action_type == "build":
+            events.extend(self._do_build(npc, action, world, tick))
+
         else:
             npc.last_action = "idle"
 
@@ -253,7 +260,7 @@ class WorldManager:
         new_tile.npc_ids.append(npc.npc_id)
 
         energy_cost = 3 if world.weather == WeatherType.STORM else 2
-        if npc.active_rope:
+        if npc.equipped == "rope":
             rope_save = config.ITEM_EFFECTS.get("rope", {}).get("move_energy_save", 0)
             energy_cost = max(0, energy_cost - rope_save)
         npc.energy = max(0, npc.energy - energy_cost)
@@ -279,9 +286,15 @@ class WorldManager:
             return []
 
         base_amount = 2
-        if npc.active_tool:
+        if npc.equipped == "tool":
             base_amount *= config.ITEM_EFFECTS.get("tool", {}).get("gather_bonus", 1)
         amount = min(base_amount, tile.resource.quantity)
+
+        # Capacity check
+        if not npc.inventory.has_space(amount):
+            amount = config.INVENTORY_MAX_SLOTS - npc.inventory.total_items()
+        if amount <= 0:
+            return []
         tile.resource.quantity -= amount
 
         if rtype == ResourceType.FOOD:
@@ -328,9 +341,17 @@ class WorldManager:
         npc.last_message_tick = tick
         npc.last_action = "talk"
 
-        # If talking to player, put message in player inbox
+        # If talking to player, push to dialogue_queue for reply UI
         if world.player and target_id == "player":
             world.player.inbox.append(f"{npc.name}: {full_msg}")
+            world.player.dialogue_queue.append({
+                "from_id": npc.npc_id,
+                "from_name": npc.name,
+                "message": full_msg,
+                "tick": tick,
+                "reply_options": None,  # filled by GodAgent async
+            })
+            world._pending_dialogue_option_gen = True
 
         return [WorldEvent(
             event_type=EventType.NPC_SPOKE,
@@ -409,7 +430,11 @@ class WorldManager:
         )]
 
     def _do_sleep(self, npc: NPC, world: World, tick: int) -> list[WorldEvent]:
-        restore = config.SLEEP_ENERGY_RESTORE
+        tile = world.get_tile(npc.x, npc.y)
+        if tile and tile.furniture == "bed":
+            restore = config.FURNITURE_EFFECTS.get("bed", {}).get("sleep_energy", config.SLEEP_ENERGY_RESTORE)
+        else:
+            restore = config.SLEEP_ENERGY_RESTORE
         npc.energy = min(100, npc.energy + restore)
         npc.last_action = "sleep"
         return [WorldEvent(
@@ -419,7 +444,7 @@ class WorldManager:
             origin_x=npc.x,
             origin_y=npc.y,
             radius=2,
-            payload={"amount": restore},
+            payload={"amount": restore, "on_bed": tile is not None and tile.furniture == "bed"},
         )]
 
     def _do_exchange(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
@@ -480,6 +505,13 @@ class WorldManager:
         if qty <= 0:
             return []
 
+        # Capacity check
+        if not npc.inventory.has_space(qty):
+            qty = config.INVENTORY_MAX_SLOTS - npc.inventory.total_items()
+            cost = qty * config.FOOD_COST_GOLD
+        if qty <= 0:
+            return []
+
         npc.inventory.gold -= cost
         npc.inventory.food += qty
         npc.last_action = "buy_food"
@@ -495,7 +527,7 @@ class WorldManager:
         )]
 
     def _do_craft(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
-        """Craft an item from a recipe."""
+        """Craft an item from a recipe. Nearby table doubles output."""
         item = action.get("craft_item", "").strip()
         recipe = config.CRAFTING_RECIPES.get(item)
         if not recipe:
@@ -506,22 +538,42 @@ class WorldManager:
             if npc.inventory.get(mat) < needed:
                 return []
 
+        # Check for nearby table (3-tile Manhattan radius)
+        table_bonus = 1
+        for dy in range(-3, 4):
+            for dx in range(-3, 4):
+                if abs(dx) + abs(dy) <= 3:
+                    t = world.get_tile(npc.x + dx, npc.y + dy)
+                    if t and t.furniture == "table":
+                        table_bonus = config.FURNITURE_EFFECTS.get("table", {}).get("craft_bonus", 1)
+                        break
+            if table_bonus > 1:
+                break
+
+        qty = table_bonus
+
+        # Capacity check
+        if not npc.inventory.has_space(qty):
+            return []
+
         # Consume materials
         for mat, needed in recipe.items():
             npc.inventory.set(mat, npc.inventory.get(mat) - needed)
 
         # Produce item
-        npc.inventory.set(item, npc.inventory.get(item) + 1)
+        npc.inventory.set(item, npc.inventory.get(item) + qty)
         npc.last_action = "craft"
+        actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
+        evt = EventType.PLAYER_CRAFTED if actor_id == "player" else EventType.NPC_CRAFTED
 
         return [WorldEvent(
-            event_type=EventType.NPC_CRAFTED,
+            event_type=evt,
             tick=tick,
-            actor_id=npc.npc_id,
+            actor_id=actor_id,
             origin_x=npc.x,
             origin_y=npc.y,
             radius=3,
-            payload={"item": item, "qty": 1},
+            payload={"item": item, "qty": qty},
         )]
 
     def _do_sell(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
@@ -553,11 +605,13 @@ class WorldManager:
         npc.inventory.set(item, npc_has - qty)
         npc.inventory.gold = round(npc.inventory.gold + gold_earned, 1)
         npc.last_action = "sell"
+        actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
+        evt = EventType.PLAYER_SOLD if actor_id == "player" else EventType.NPC_SOLD
 
         return [WorldEvent(
-            event_type=EventType.NPC_SOLD,
+            event_type=evt,
             tick=tick,
-            actor_id=npc.npc_id,
+            actor_id=actor_id,
             origin_x=npc.x,
             origin_y=npc.y,
             radius=4,
@@ -590,18 +644,52 @@ class WorldManager:
         if qty <= 0:
             return []
 
+        # Capacity check
+        if not npc.inventory.has_space(qty):
+            qty = config.INVENTORY_MAX_SLOTS - npc.inventory.total_items()
+            total_cost = round(qty * mp.current, 1)
+        if qty <= 0:
+            return []
+
         npc.inventory.gold = round(npc.inventory.gold - total_cost, 1)
         npc.inventory.set(item, npc.inventory.get(item) + qty)
         npc.last_action = "buy"
+        actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
+        evt = EventType.PLAYER_BOUGHT if actor_id == "player" else EventType.NPC_BOUGHT
 
         return [WorldEvent(
-            event_type=EventType.NPC_BOUGHT,
+            event_type=evt,
             tick=tick,
-            actor_id=npc.npc_id,
+            actor_id=actor_id,
             origin_x=npc.x,
             origin_y=npc.y,
             radius=4,
             payload={"item": item, "qty": qty, "gold": total_cost, "price": mp.current},
+        )]
+
+    def _do_equip_item(self, character, item: str, world: World, tick: int) -> list[WorldEvent]:
+        """Unified equip logic for NPC or Player. Routes tool/rope into equipment slot."""
+        if character.inventory.get(item) < 1:
+            return []
+
+        old = character.equipped
+        if old and old != item:
+            # Return old item to inventory if space available
+            character.inventory.set(old, character.inventory.get(old) + 1)
+
+        character.inventory.set(item, character.inventory.get(item) - 1)
+        character.equipped = item
+
+        actor_id = getattr(character, "npc_id", getattr(character, "player_id", "unknown"))
+        evt_type = EventType.NPC_EQUIPPED if hasattr(character, "npc_id") else EventType.PLAYER_EQUIPPED
+        return [WorldEvent(
+            event_type=evt_type,
+            tick=tick,
+            actor_id=actor_id,
+            origin_x=character.x,
+            origin_y=character.y,
+            radius=2,
+            payload={"item": item, "replaced": old},
         )]
 
     def _do_use_item(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
@@ -611,38 +699,29 @@ class WorldManager:
             return []
 
         effects = config.ITEM_EFFECTS.get(item, {})
-        effect_desc = ""
 
         if "energy" in effects:
             restore = effects["energy"]
             npc.energy = min(100, npc.energy + restore)
             npc.inventory.set(item, npc.inventory.get(item) - 1)
-            effect_desc = f"恢复{restore}体力"
-        elif "gather_bonus" in effects:
-            # Equip tool — consumed on use
-            npc.active_tool = True
-            npc.inventory.set(item, npc.inventory.get(item) - 1)
-            effect_desc = f"采集效率×{effects['gather_bonus']}"
-        elif "move_energy_save" in effects:
-            # Equip rope — consumed on use
-            npc.active_rope = True
-            npc.inventory.set(item, npc.inventory.get(item) - 1)
-            effect_desc = f"移动体力消耗-{effects['move_energy_save']}"
+            npc.last_action = "use_item"
+            return [WorldEvent(
+                event_type=EventType.NPC_USED_ITEM,
+                tick=tick,
+                actor_id=npc.npc_id,
+                origin_x=npc.x,
+                origin_y=npc.y,
+                radius=2,
+                payload={"item": item, "effect": f"恢复{restore}体力"},
+            )]
+        elif "gather_bonus" in effects or "move_energy_save" in effects:
+            # Equip slot items
+            events = self._do_equip_item(npc, item, world, tick)
+            if events:
+                npc.last_action = "use_item"
+            return events
 
-        if not effect_desc:
-            return []
-
-        npc.last_action = "use_item"
-
-        return [WorldEvent(
-            event_type=EventType.NPC_USED_ITEM,
-            tick=tick,
-            actor_id=npc.npc_id,
-            origin_x=npc.x,
-            origin_y=npc.y,
-            radius=2,
-            payload={"item": item, "effect": effect_desc},
-        )]
+        return []
 
     def _do_propose_trade(self, npc: NPC, action: dict, world: World, tick: int) -> list[WorldEvent]:
         """Send a trade proposal to a nearby NPC."""
@@ -827,6 +906,41 @@ class WorldManager:
             },
         )]
 
+    def _do_build(self, character, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Build furniture on the current tile. Works for NPC or Player."""
+        furniture = (action.get("build_furniture") or action.get("furniture_type", "")).strip()
+        recipe = config.FURNITURE_RECIPES.get(furniture)
+        if not recipe:
+            return []
+
+        tile = world.get_tile(character.x, character.y)
+        if not tile or tile.furniture:
+            return []  # tile already has furniture
+
+        # Check materials
+        for mat, qty in recipe.items():
+            if character.inventory.get(mat) < qty:
+                return []
+
+        # Consume materials and place furniture
+        for mat, qty in recipe.items():
+            character.inventory.set(mat, character.inventory.get(mat) - qty)
+        tile.furniture = furniture
+
+        actor_id = getattr(character, "npc_id", getattr(character, "player_id", "unknown"))
+        last_action_attr = "last_action"
+        setattr(character, last_action_attr, "build")
+
+        return [WorldEvent(
+            event_type=EventType.FURNITURE_BUILT,
+            tick=tick,
+            actor_id=actor_id,
+            origin_x=character.x,
+            origin_y=character.y,
+            radius=4,
+            payload={"furniture": furniture, "x": character.x, "y": character.y},
+        )]
+
     # ── Player actions ─────────────────────────────────────────────────────────
 
     def apply_player_action(self, player: Player, action: dict, world: World) -> list[WorldEvent]:
@@ -849,6 +963,37 @@ class WorldManager:
             events.extend(self._player_exchange(player, action, world, tick))
         elif action_type == "buy_food":
             events.extend(self._player_buy_food(player, action, world, tick))
+        elif action_type == "craft":
+            events.extend(self._do_craft(player, action, world, tick))
+        elif action_type == "sell":
+            events.extend(self._do_sell(player, action, world, tick))
+        elif action_type == "buy":
+            events.extend(self._do_buy(player, action, world, tick))
+        elif action_type == "use_item":
+            events.extend(self._player_use_item(player, action, world, tick))
+        elif action_type == "build":
+            events.extend(self._do_build(player, action, world, tick))
+        elif action_type == "propose_trade":
+            events.extend(self._player_propose_trade(player, action, world, tick))
+        elif action_type == "accept_trade":
+            events.extend(self._player_accept_trade(player, action, world, tick))
+        elif action_type == "reject_trade":
+            events.extend(self._player_reject_trade(player, action, world, tick))
+        elif action_type == "dialogue_reply":
+            events.extend(self._player_dialogue_reply(player, action, world, tick))
+        elif action_type == "rest":
+            tile = world.get_tile(player.x, player.y)
+            rest_energy = 20
+            if tile and tile.furniture == "chair":
+                rest_energy = config.FURNITURE_EFFECTS.get("chair", {}).get("rest_energy", 35)
+            player.energy = min(100, player.energy + rest_energy)
+        elif action_type == "sleep":
+            tile = world.get_tile(player.x, player.y)
+            if tile and tile.furniture == "bed":
+                restore = config.FURNITURE_EFFECTS.get("bed", {}).get("sleep_energy", config.SLEEP_ENERGY_RESTORE)
+            else:
+                restore = config.SLEEP_ENERGY_RESTORE
+            player.energy = min(100, player.energy + restore)
 
         player.last_action = action_type
         return events
@@ -873,6 +1018,9 @@ class WorldManager:
         new_tile.player_here = True
 
         energy_cost = 3 if world.weather == WeatherType.STORM else 2
+        if player.equipped == "rope":
+            rope_save = config.ITEM_EFFECTS.get("rope", {}).get("move_energy_save", 0)
+            energy_cost = max(0, energy_cost - rope_save)
         player.energy = max(0, player.energy - energy_cost)
 
         return [WorldEvent(
@@ -893,7 +1041,17 @@ class WorldManager:
             return []
 
         rtype = tile.resource.resource_type
-        amount = min(2, tile.resource.quantity)
+        base_amount = 2
+        if player.equipped == "tool":
+            base_amount *= config.ITEM_EFFECTS.get("tool", {}).get("gather_bonus", 1)
+        amount = min(base_amount, tile.resource.quantity)
+
+        # Capacity check
+        if not player.inventory.has_space(amount):
+            amount = config.INVENTORY_MAX_SLOTS - player.inventory.total_items()
+        if amount <= 0:
+            return []
+
         tile.resource.quantity -= amount
 
         if rtype == ResourceType.FOOD:
@@ -1029,9 +1187,163 @@ class WorldManager:
         if qty <= 0:
             return []
 
+        if not player.inventory.has_space(qty):
+            qty = config.INVENTORY_MAX_SLOTS - player.inventory.total_items()
+            cost = qty * config.FOOD_COST_GOLD
+        if qty <= 0:
+            return []
+
         player.inventory.gold -= cost
         player.inventory.food += qty
         return []
+
+    def _player_use_item(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        item = action.get("use_item", "").strip()
+        if not item or player.inventory.get(item) <= 0:
+            return []
+
+        effects = config.ITEM_EFFECTS.get(item, {})
+
+        if "energy" in effects:
+            restore = effects["energy"]
+            player.energy = min(100, player.energy + restore)
+            player.inventory.set(item, player.inventory.get(item) - 1)
+            return [WorldEvent(
+                event_type=EventType.PLAYER_USED_ITEM,
+                tick=tick,
+                actor_id="player",
+                origin_x=player.x,
+                origin_y=player.y,
+                radius=2,
+                payload={"item": item, "effect": f"恢复{restore}体力"},
+            )]
+        elif "gather_bonus" in effects or "move_energy_save" in effects:
+            events = self._do_equip_item(player, item, world, tick)
+            return events
+
+        return []
+
+    def _player_propose_trade(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        target_id = action.get("target_id", "")
+        target_npc = world.get_npc(target_id)
+        if not target_npc:
+            return []
+
+        dist = abs(target_npc.x - player.x) + abs(target_npc.y - player.y)
+        if dist > config.NPC_ADJACENT_RADIUS + 2:
+            return []
+
+        offer_item = action.get("offer_item", "")
+        offer_qty = int(action.get("offer_qty", 0) or 0)
+        request_item = action.get("request_item", "")
+        request_qty = int(action.get("request_qty", 0) or 0)
+
+        if not offer_item or not request_item or offer_qty <= 0 or request_qty <= 0:
+            return []
+        if player.inventory.get(offer_item) < offer_qty:
+            return []
+
+        proposal = {
+            "from_id": "player",
+            "offer_item": offer_item, "offer_qty": offer_qty,
+            "request_item": request_item, "request_qty": request_qty,
+            "tick": tick, "round": 1,
+        }
+        target_npc.pending_proposals.append(proposal)
+        target_npc.memory.add_to_inbox(
+            f"[{player.name}] 向你提出交易提案: {offer_qty}{offer_item}↔{request_qty}{request_item}"
+        )
+        return [WorldEvent(
+            event_type=EventType.TRADE_PROPOSED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=5,
+            payload={"target_id": target_id, "offer_item": offer_item, "offer_qty": offer_qty,
+                     "request_item": request_item, "request_qty": request_qty},
+        )]
+
+    def _player_accept_trade(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        """Accept a trade proposal from an NPC (player has pending proposals in inbox)."""
+        from_id = action.get("proposal_from", "")
+        target_npc = world.get_npc(from_id)
+        if not target_npc:
+            return []
+
+        # Find matching proposal in NPC's pending list directed to player
+        proposal = None
+        for p in target_npc.pending_proposals:
+            if p.get("from_id") == from_id:
+                proposal = p
+                break
+
+        # Alternatively, treat as direct action: player accepts offer stored in action
+        offer_item = action.get("offer_item", "")
+        offer_qty = int(action.get("offer_qty", 0) or 0)
+        request_item = action.get("request_item", "")
+        request_qty = int(action.get("request_qty", 0) or 0)
+
+        if not offer_item or not request_item or offer_qty <= 0 or request_qty <= 0:
+            return []
+
+        if (target_npc.inventory.get(offer_item) < offer_qty or
+                player.inventory.get(request_item) < request_qty):
+            return []
+
+        if not player.inventory.has_space(offer_qty):
+            return []
+
+        target_npc.inventory.set(offer_item, target_npc.inventory.get(offer_item) - offer_qty)
+        target_npc.inventory.set(request_item, target_npc.inventory.get(request_item) + request_qty)
+        player.inventory.set(offer_item, player.inventory.get(offer_item) + offer_qty)
+        player.inventory.set(request_item, player.inventory.get(request_item) - request_qty)
+
+        return [WorldEvent(
+            event_type=EventType.TRADE_ACCEPTED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=5,
+            payload={"with": from_id, "offer_item": offer_item, "offer_qty": offer_qty,
+                     "request_item": request_item, "request_qty": request_qty},
+        )]
+
+    def _player_reject_trade(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        from_id = action.get("proposal_from", "")
+        target_npc = world.get_npc(from_id)
+        if target_npc:
+            target_npc.memory.add_to_inbox(f"[{player.name}] 拒绝了你的交易提案")
+        return [WorldEvent(
+            event_type=EventType.TRADE_REJECTED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=3,
+            payload={"from_id": from_id},
+        )]
+
+    def _player_dialogue_reply(self, player: Player, action: dict, world: World, tick: int) -> list[WorldEvent]:
+        to_npc_id = action.get("to_npc_id", "")
+        reply_msg = str(action.get("message", "")).strip()
+        npc = world.get_npc(to_npc_id)
+        if npc and reply_msg:
+            npc.memory.add_to_inbox(f"[{player.name}] 对你说: {reply_msg}")
+        # Remove handled dialogue from queue
+        player.dialogue_queue = [
+            d for d in player.dialogue_queue if d.get("from_id") != to_npc_id
+        ]
+        return [WorldEvent(
+            event_type=EventType.PLAYER_DIALOGUE_REPLIED,
+            tick=tick,
+            actor_id="player",
+            origin_x=player.x,
+            origin_y=player.y,
+            radius=5,
+            payload={"to_npc_id": to_npc_id, "message": reply_msg},
+        )]
 
     # ── God actions ───────────────────────────────────────────────────────────
 

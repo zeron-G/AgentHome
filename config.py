@@ -26,6 +26,24 @@ MARKET_SMOOTHING: float = 0.3        # price responsiveness (0=frozen, 1=instant
 MARKET_PRICE_MIN_RATIO: float = 0.3  # floor = base × 0.3
 MARKET_PRICE_MAX_RATIO: float = 3.0  # ceiling = base × 3.0
 
+# ── Inventory ─────────────────────────────────────────────────────────────────
+
+INVENTORY_MAX_SLOTS: int = 20    # max item slots (gold excluded)
+
+# ── Furniture System ──────────────────────────────────────────────────────────
+
+FURNITURE_RECIPES: dict = {
+    "bed":   {"wood": 4},   # sleep on bed: +80 energy (vs +50 without)
+    "table": {"wood": 3},   # craft near table: output ×2
+    "chair": {"wood": 2},   # rest on chair: +35 energy (vs +20 without)
+}
+
+FURNITURE_EFFECTS: dict = {
+    "bed":   {"sleep_energy": 80},
+    "table": {"craft_bonus": 2},
+    "chair": {"rest_energy": 35},
+}
+
 # ── Crafting System ───────────────────────────────────────────────────────────
 
 CRAFTING_RECIPES: dict = {

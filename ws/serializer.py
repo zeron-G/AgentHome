@@ -81,6 +81,8 @@ class WorldSerializer:
                     t["e"] = 1
                 if tile.player_here:
                     t["p"] = 1
+                if tile.furniture:
+                    t["f"] = tile.furniture
                 result.append(t)
         return result
 
@@ -97,8 +99,9 @@ class WorldSerializer:
             "last_message": npc.last_message,
             "last_message_tick": npc.last_message_tick,
             "is_processing": npc.is_processing,
-            "active_tool": getattr(npc, "active_tool", False),
-            "active_rope": getattr(npc, "active_rope", False),
+            "equipped": getattr(npc, "equipped", None),
+            "inv_count": npc.inventory.total_items(),
+            "inv_max": config.INVENTORY_MAX_SLOTS,
             "pending_proposals": len(getattr(npc, "pending_proposals", [])),
         }
         # Conditionally include inner thought
@@ -118,6 +121,20 @@ class WorldSerializer:
         return d
 
     def _serialize_player(self, player) -> dict:
+        # Latest pending dialogue (with reply_options if available)
+        dialogue_queue = getattr(player, "dialogue_queue", [])
+        latest_dialogue = None
+        for d in reversed(dialogue_queue):
+            if d.get("reply_options") is not None or len(dialogue_queue) > 0:
+                latest_dialogue = {
+                    "from_id": d["from_id"],
+                    "from_name": d["from_name"],
+                    "message": d["message"],
+                    "tick": d["tick"],
+                    "reply_options": d.get("reply_options"),  # None while loading
+                }
+                break
+
         return {
             "id": player.player_id,
             "name": player.name,
@@ -129,6 +146,10 @@ class WorldSerializer:
             "last_message": player.last_message,
             "inventory": player.inventory.to_dict(),
             "inbox": list(player.inbox[-10:]),  # last 10 messages
+            "equipped": getattr(player, "equipped", None),
+            "inv_count": player.inventory.total_items(),
+            "inv_max": config.INVENTORY_MAX_SLOTS,
+            "dialogue": latest_dialogue,
         }
 
     def _serialize_market(self, world: World) -> dict:

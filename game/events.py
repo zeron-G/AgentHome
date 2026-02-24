@@ -42,6 +42,16 @@ class EventType(str, Enum):
     TRADE_REJECTED = "trade_rejected"
     TRADE_COUNTERED = "trade_countered"
     MARKET_UPDATED = "market_updated"
+    # Equipment & building events
+    NPC_EQUIPPED = "npc_equipped"
+    PLAYER_EQUIPPED = "player_equipped"
+    FURNITURE_BUILT = "furniture_built"
+    # Player economy events
+    PLAYER_CRAFTED = "player_crafted"
+    PLAYER_SOLD = "player_sold"
+    PLAYER_BOUGHT = "player_bought"
+    PLAYER_USED_ITEM = "player_used_item"
+    PLAYER_DIALOGUE_REPLIED = "player_dialogue_replied"
 
 
 @dataclass
@@ -171,6 +181,39 @@ class WorldEvent:
 
         elif et == EventType.MARKET_UPDATED:
             return f"[市场] 价格已更新 (Tick {p.get('tick',0)})"
+
+        elif et == EventType.NPC_EQUIPPED:
+            replaced = p.get("replaced")
+            extra = f" (替换了 {replaced})" if replaced else ""
+            return f"{actor_name} 装备了 {p.get('item','?')}{extra}"
+
+        elif et == EventType.PLAYER_EQUIPPED:
+            replaced = p.get("replaced")
+            extra = f" (替换了 {replaced})" if replaced else ""
+            return f"[玩家] {actor_name} 装备了 {p.get('item','?')}{extra}"
+
+        elif et == EventType.FURNITURE_BUILT:
+            return f"{actor_name} 在 ({p.get('x','?')},{p.get('y','?')}) 建造了 {p.get('furniture','?')}"
+
+        elif et == EventType.PLAYER_CRAFTED:
+            return f"[玩家] 制造了 {p.get('qty',1)} 个 {p.get('item','?')}"
+
+        elif et == EventType.PLAYER_SOLD:
+            return (f"[玩家] 卖出 {p.get('qty',0)} {p.get('item','?')}, "
+                    f"获得 {p.get('gold',0):.1f} 金币")
+
+        elif et == EventType.PLAYER_BOUGHT:
+            return (f"[玩家] 买入 {p.get('qty',0)} {p.get('item','?')}, "
+                    f"花费 {p.get('gold',0):.1f} 金币")
+
+        elif et == EventType.PLAYER_USED_ITEM:
+            return f"[玩家] 使用了 {p.get('item','?')} — {p.get('effect','')}"
+
+        elif et == EventType.PLAYER_DIALOGUE_REPLIED:
+            npc_id = p.get("to_npc_id","")
+            tn = world.get_npc(npc_id)
+            npc_name = tn.name if tn else npc_id
+            return f"[玩家] 回复了 {npc_name}: \"{p.get('message','')}\""
 
         elif et == EventType.PLAYER_MOVED:
             return f"[玩家] {p.get('name', actor_name)} 移动到 ({self.origin_x},{self.origin_y})"

@@ -157,7 +157,7 @@ agenthome/
 | [📦 模块详解](docs/modules.md) | 每个 Python 模块的数据结构与方法说明 |
 | [📡 API 参考](docs/api-reference.md) | REST API、WebSocket 消息格式、NPC/上帝动作 Schema |
 | [⚙️ 配置参考](docs/config.md) | `config.py` 所有常量的默认值与说明 |
-| [🎭 叙事设计](docs/narrative-design.md) | 故事前提、情感钩子设计、NPC 人格模板、God Agent 导演职责 |
+| [🎭 叙事设计](docs/narrative-design.md) | 完整世界观、分层揭示叙事、五角色设定（含隐藏的第五人）、隐晦提示系统、认知屏障机制 |
 
 ---
 

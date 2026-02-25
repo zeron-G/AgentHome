@@ -62,5 +62,133 @@
       14,
       14
     ]
+  },
+  {
+    "record_id": "025d8930",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 先采集石头，这是制造工具的第一步。效率是关键。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975788.1541367,
+    "tick": 9,
+    "location": [
+      15,
+      15
+    ]
+  },
+  {
+    "record_id": "b2e01100",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 已经采到石头了，得赶紧向西去找森林弄木头，不能在这岩石地耗着，效率是生命！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975799.1120698,
+    "tick": 13,
+    "location": [
+      15,
+      15
+    ]
+  },
+  {
+    "record_id": "04007118",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 森林还没找到，继续向西，争取尽快拿到木头，制造工具是当务之急。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975808.7164323,
+    "tick": 16,
+    "location": [
+      14,
+      15
+    ]
+  },
+  {
+    "record_id": "33cb7b6a",
+    "npc_id": "npc_dave",
+    "content": "行动: talk | 说: 你好，我正要去砍木头做工具，效率第一！你有什么事吗？",
+    "tags": [
+      "talk",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975821.9521272,
+    "tick": 20,
+    "location": [
+      13,
+      15
+    ]
+  },
+  {
+    "record_id": "49f0a5e1",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 森林就在前面了，赶紧过去砍木头。不能耽误时间，效率最重要。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975828.8416433,
+    "tick": 23,
+    "location": [
+      13,
+      15
+    ]
+  },
+  {
+    "record_id": "10c68e2c",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 木头就在旁边，赶紧过去采集。不能耽误时间，效率第一。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975837.457744,
+    "tick": 26,
+    "location": [
+      12,
+      15
+    ]
+  },
+  {
+    "record_id": "99909a42",
+    "npc_id": "npc_dave",
+    "content": "行动: gather | 想: 木头找到了，立刻采集，不能浪费时间。制造工具是当务之急。",
+    "tags": [
+      "gather",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975845.2343993,
+    "tick": 28,
+    "location": [
+      11,
+      15
+    ]
+  },
+  {
+    "record_id": "3ce566fa",
+    "npc_id": "npc_dave",
+    "content": "行动: craft",
+    "tags": [
+      "craft",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771975859.117815,
+    "tick": 33,
+    "location": [
+      11,
+      15
+    ]
   }
 ]

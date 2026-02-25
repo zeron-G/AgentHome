@@ -62,5 +62,101 @@
       6,
       5
     ]
+  },
+  {
+    "record_id": "e9d5b65b",
+    "npc_id": "npc_alice",
+    "content": "行动: gather | 想: 太棒了，我现在在森林里！我要赶紧采集一些木头，这是制作工具的第一步呢！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975787.9371476,
+    "tick": 9,
+    "location": [
+      6,
+      5
+    ]
+  },
+  {
+    "record_id": "faacc66a",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 好啦，木头已经采集好了！现在我要向南走一格，去(6,4)找找石头，这样就能制作工具了！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975796.9467633,
+    "tick": 12,
+    "location": [
+      6,
+      5
+    ]
+  },
+  {
+    "record_id": "b12d44a5",
+    "npc_id": "npc_alice",
+    "content": "行动: think | 笔记: 计划步骤1要求我在(6,4)采集石头，但我当前地块是森林，资源是草药。我不能在这里采集到石头。我需要找到有石头的地块才能完成制作工具的目标。",
+    "tags": [
+      "think",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975814.5534034,
+    "tick": 18,
+    "location": [
+      6,
+      4
+    ]
+  },
+  {
+    "record_id": "0e26ba43",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 哎呀，我看看！这里没有石头呢！不过我看到西北方向有石头标记S，我得赶紧过去采集，这样才能做工具！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975827.902804,
+    "tick": 22,
+    "location": [
+      6,
+      4
+    ]
+  },
+  {
+    "record_id": "f068e5c7",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 啊哈！我发现旁边的格子里有石头！我得赶紧过去采集，这样就能制作我的工具啦！太棒了！",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975841.450841,
+    "tick": 27,
+    "location": [
+      5,
+      5
+    ]
+  },
+  {
+    "record_id": "ab495aa0",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 哇，我看到西北方向有石头啦！我得赶紧过去采集，这样就能制作我的工具了，提高采集效率！",
+    "tags": [
+      "move",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771975857.6249926,
+    "tick": 32,
+    "location": [
+      4,
+      6
+    ]
   }
 ]

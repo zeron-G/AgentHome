@@ -62,5 +62,117 @@
       15,
       6
     ]
+  },
+  {
+    "record_id": "7592bf1a",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 前往(15,3)采集食物。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975791.815087,
+    "tick": 10,
+    "location": [
+      15,
+      5
+    ]
+  },
+  {
+    "record_id": "5e5a656c",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975801.383425,
+    "tick": 14,
+    "location": [
+      15,
+      4
+    ]
+  },
+  {
+    "record_id": "be6c281b",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975810.874405,
+    "tick": 17,
+    "location": [
+      14,
+      4
+    ]
+  },
+  {
+    "record_id": "35ee22ac",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975821.229665,
+    "tick": 20,
+    "location": [
+      13,
+      3
+    ]
+  },
+  {
+    "record_id": "1df878fe",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975828.786134,
+    "tick": 23,
+    "location": [
+      14,
+      2
+    ]
+  },
+  {
+    "record_id": "8c8d1ff5",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975839.047492,
+    "tick": 26,
+    "location": [
+      14,
+      1
+    ]
+  },
+  {
+    "record_id": "82c1453c",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近食物，准备采集。",
+    "tags": [
+      "move",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975847.496289,
+    "tick": 29,
+    "location": [
+      13,
+      1
+    ]
   }
 ]

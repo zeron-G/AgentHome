@@ -46,5 +46,117 @@
       5,
       15
     ]
+  },
+  {
+    "record_id": "bf21671e",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 有趣，我注意到此处有丰富的石头资源。继续囤积石头，以验证稀缺资源对市场价格的影响。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975791.3784115,
+    "tick": 10,
+    "location": [
+      5,
+      15
+    ]
+  },
+  {
+    "record_id": "e3c0288f",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 我注意到现在背包里只有石头，需要木头来制造工具。我将移动到附近的森林地块，采集一些木头。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975808.0463061,
+    "tick": 16,
+    "location": [
+      5,
+      15
+    ]
+  },
+  {
+    "record_id": "eb491dea",
+    "npc_id": "npc_carol",
+    "content": "行动: gather | 想: 我已到达森林地块，现在可以采集木头了。这是制造工具所需的材料之一，也是完成计划的第一步。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975819.0181923,
+    "tick": 19,
+    "location": [
+      6,
+      15
+    ]
+  },
+  {
+    "record_id": "c9e84d33",
+    "npc_id": "npc_carol",
+    "content": "行动: craft",
+    "tags": [
+      "craft",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1771975829.8189225,
+    "tick": 23,
+    "location": [
+      6,
+      15
+    ]
+  },
+  {
+    "record_id": "cded3db8",
+    "npc_id": "npc_carol",
+    "content": "行动: use_item",
+    "tags": [
+      "use_item",
+      "dusk",
+      "sunny"
+    ],
+    "timestamp": 1771975837.4547424,
+    "tick": 26,
+    "location": [
+      6,
+      15
+    ]
+  },
+  {
+    "record_id": "9700d6ef",
+    "npc_id": "npc_carol",
+    "content": "行动: talk | 说: Dave，我注意到你正在采集木头。效率是关键，特别是在市场波动时。",
+    "tags": [
+      "talk",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771975849.9452722,
+    "tick": 30,
+    "location": [
+      6,
+      15
+    ]
+  },
+  {
+    "record_id": "a0a380a6",
+    "npc_id": "npc_carol",
+    "content": "行动: talk | 说: 有趣，我注意到你移动到了我的附近。你有什么特别的市场观察或资源需求吗？",
+    "tags": [
+      "talk",
+      "night",
+      "sunny"
+    ],
+    "timestamp": 1771975858.3294897,
+    "tick": 32,
+    "location": [
+      6,
+      15
+    ]
   }
 ]

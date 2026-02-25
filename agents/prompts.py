@@ -3,14 +3,70 @@
 Modular design: system prompt sections are assembled based on the NPC's
 current situation (nearby NPCs, at exchange, has craftable materials,
 has pending proposals).
+
+Narrative system: NPC personality YAML files are loaded from
+agents/personalities/ and injected into system prompts. The isolation
+awareness barrier is automatically applied to all NPCs.
 """
 from __future__ import annotations
 
+import logging
+import os
+from functools import lru_cache
 from typing import Optional
 
 from pydantic import BaseModel
 
 import config
+
+logger = logging.getLogger(__name__)
+
+# ── Personality YAML loading ────────────────────────────────────────────────
+
+_PERSONALITIES_DIR = os.path.join(os.path.dirname(__file__), "personalities")
+
+
+@lru_cache(maxsize=16)
+def _load_personality(npc_id: str) -> dict | None:
+    """Load a personality YAML file for the given NPC.
+
+    Looks for agents/personalities/{short_id}.yaml where short_id is
+    npc_id with 'npc_' prefix stripped (e.g. 'npc_alice' → 'alice.yaml').
+    Returns parsed dict or None if the file doesn't exist or can't be parsed.
+    """
+    try:
+        import yaml
+    except ImportError:
+        logger.warning("PyYAML not installed — personality YAML loading disabled")
+        return None
+
+    short_id = npc_id.replace("npc_", "", 1)
+    path = os.path.join(_PERSONALITIES_DIR, f"{short_id}.yaml")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else None
+    except Exception as e:
+        logger.warning(f"Failed to load personality YAML for {npc_id}: {e}")
+        return None
+
+
+def reload_personalities():
+    """Clear the personality cache so YAML files are re-read on next access."""
+    _load_personality.cache_clear()
+
+
+# ── Isolation awareness barrier text ────────────────────────────────────────
+
+_ISOLATION_BARRIER = (
+    "\n【认知屏障——绝对遵守】"
+    "\n你从未想过离开村子，也从未觉得这有什么不对。"
+    "\n如果有人问你为什么不离开，你会觉得这个问题很奇怪，不理解为什么要离开。"
+    "\n你甚至不会用'离开'这个词来描述搬去别处的概念。"
+    "\n村子就是整个世界，你对此没有任何疑问。"
+)
 
 
 # ── Pydantic schemas for structured LLM output ───────────────────────────────
@@ -426,6 +482,25 @@ def build_npc_system_prompt(
             build_lines.append(f"  {status} {furniture}: 需要 {recipe_str} → 效果:{effect_str}")
         prompt += _MODULE_BUILD.format(build_options="\n".join(build_lines))
 
+    # ── Personality YAML injection (narrative system) ─────────────────────
+    personality_data = _load_personality(npc.npc_id)
+    if personality_data:
+        # Inject hidden desire — NPC can subtly express this in dialogue
+        hidden_desire = personality_data.get("hidden_desire", "")
+        if hidden_desire:
+            prompt += f"\n【内心深处的渴望（偶尔在对话中流露，但不要每次都提）】\n{hidden_desire.strip()}\n"
+
+        # Inject forbidden topics — NPC should avoid or react oddly to these
+        forbidden = personality_data.get("forbidden_topics")
+        if forbidden and isinstance(forbidden, dict):
+            prompt += "\n【话题禁区——触及以下话题时要表现出回避或不安】"
+            for topic, reaction in forbidden.items():
+                prompt += f"\n- {topic}：{reaction.strip()}"
+            prompt += "\n"
+
+    # ── Isolation awareness barrier (all NPCs) ─────────────────────────
+    prompt += _ISOLATION_BARRIER
+
     prompt += (
         "\n【行为准则】"
         "\n- 严格按照当前目标与计划步骤行动，完成当前步骤后再进行下一步"
@@ -656,3 +731,86 @@ def build_god_context(god, world) -> str:
         recent_events=recent_str,
         pending_commands_section=pending_section,
     )
+
+
+# ── God hint prompt builder (narrative system) ────────────────────────────
+
+_HINT_SYSTEM_NORMAL = (
+    "你是这个世界的幕后导演，负责为玩家生成合适的对话回复选项。\n"
+    "根据NPC说的话，生成3个简短的玩家回复选项（不同风格：友好/中立/警惕），"
+    "每个不超过15个字。以 JSON 格式返回。"
+)
+
+_HINT_SYSTEM_WITH_HINT = (
+    "你是这个世界的守护者（一个隐藏的存在），负责为玩家生成对话回复选项。\n"
+    "你深爱着这个村子的每一个人，尤其是正在对话的这个年轻人。\n"
+    "你不能直接说出任何秘密，但你可以在回复选项中悄悄植入一个隐晦的提示。\n\n"
+    "【规则】\n"
+    "- 生成3个回复选项，其中2个是正常的玩家回复（友好/中立）\n"
+    "- 第3个选项是你植入的隐晦提示，但它必须看起来像是玩家自己可能会说的话\n"
+    "- 提示选项的位置随机（不要总放在最后）\n"
+    "- 提示的隐晦程度取决于 hint_level\n"
+    "- 每个选项不超过20个字\n"
+    "以 JSON 格式返回。"
+)
+
+_HINT_LEVEL_INSTRUCTIONS = {
+    "subtle": (
+        "【提示风格：隐晦】\n"
+        "提示看起来完全像普通对话选项，只是措辞微妙地指向了某个方向。\n"
+        "玩家如果不仔细想，可能不会注意到这个选项有什么特别。\n"
+        "示例：'我听说那年的天气特别奇怪。'"
+    ),
+    "cryptic": (
+        "【提示风格：谜语】\n"
+        "提示明显有些不太对劲，像是一个谜语或暗语。\n"
+        "敏感的玩家会意识到这个选项和其他选项'不一样'。\n"
+        "示例：'爸爸说过，矿山关闭的那年，村子第一次下了红雪。'"
+    ),
+    "near_direct": (
+        "【提示风格：接近直白】\n"
+        "提示几乎直接指出了某个事实，只差最后一步明说。\n"
+        "仅在最终阶段使用，玩家应该能明确感受到这不是普通选项。\n"
+        "示例：'爷爷从未离开过这里，你不觉得奇怪吗？'"
+    ),
+}
+
+
+def build_god_hint_prompt(
+    npc_name: str,
+    npc_message: str,
+    world,
+    *,
+    hint_mode: bool = False,
+    hint_level: str = "subtle",
+    hint_context: str = "",
+) -> tuple[str, str]:
+    """Build system prompt and context for God Agent's dialogue option generation.
+
+    Args:
+        npc_name: Name of the NPC speaking to the player.
+        npc_message: What the NPC said to the player.
+        world: Current World instance.
+        hint_mode: If True, one of the 3 options will contain a hidden hint.
+        hint_level: "subtle" | "cryptic" | "near_direct" — controls hint obviousness.
+        hint_context: Additional context about what clue was triggered (for the LLM).
+
+    Returns:
+        (system_prompt, context_message) tuple ready for LLM call.
+    """
+    if hint_mode:
+        system_prompt = _HINT_SYSTEM_WITH_HINT
+        level_instruction = _HINT_LEVEL_INSTRUCTIONS.get(hint_level, _HINT_LEVEL_INSTRUCTIONS["subtle"])
+        system_prompt += f"\n\n{level_instruction}"
+        if hint_context:
+            system_prompt += f"\n\n【相关线索背景（仅供你参考，不要直接说出）】\n{hint_context}"
+    else:
+        system_prompt = _HINT_SYSTEM_NORMAL
+
+    context_msg = (
+        f"NPC '{npc_name}' 对玩家说：\"{npc_message}\"\n"
+        f"当前世界：{world.time.time_str}，天气：{world.weather.value}\n"
+        f"请生成3个自然简短的玩家回复选项，放入 options 数组中。"
+    )
+
+    return system_prompt, context_msg

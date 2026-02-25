@@ -498,8 +498,32 @@ def build_npc_system_prompt(
                 prompt += f"\n- {topic}：{reaction.strip()}"
             prompt += "\n"
 
-    # ── Isolation awareness barrier (all NPCs) ─────────────────────────
-    prompt += _ISOLATION_BARRIER
+        # Inject YAML relationships for richer social context
+        yaml_rels = personality_data.get("relationships")
+        if yaml_rels and isinstance(yaml_rels, dict):
+            rel_lines = []
+            for other_id, desc in yaml_rels.items():
+                other_npc = world.get_npc(other_id)
+                other_name = other_npc.name if other_npc else other_id.replace("npc_", "")
+                rel_lines.append(f"- {other_name}：{desc}")
+            if rel_lines:
+                prompt += "\n【角色关系（影响你的对话态度和互动方式）】\n" + "\n".join(rel_lines) + "\n"
+
+    # ── Isolation awareness barrier ────────────────────────────────────
+    # Lily (partial awareness) uses a custom weaker barrier from her YAML
+    isolation_awareness = personality_data.get("isolation_awareness") if personality_data else None
+    if isolation_awareness == "partial":
+        barrier_override = personality_data.get("isolation_barrier_override", "")
+        if barrier_override:
+            prompt += f"\n【认知屏障——弱化版】\n{barrier_override.strip()}\n"
+        else:
+            prompt += _ISOLATION_BARRIER
+    elif isolation_awareness is False:
+        # NPCs like Marco: strongest barrier, standard text applies
+        prompt += _ISOLATION_BARRIER
+    else:
+        # Default: standard barrier for all other NPCs
+        prompt += _ISOLATION_BARRIER
 
     prompt += (
         "\n【行为准则】"

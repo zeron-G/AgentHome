@@ -329,66 +329,167 @@ class World:
 # ── Default NPC Profiles ──────────────────────────────────────────────────────
 
 def _default_profiles() -> list[NPCProfile]:
+    """创建所有NPC的默认档案（8个角色：6主要+2次要）。
+
+    角色设定与 agents/personalities/*.yaml 配合使用：
+    - YAML 文件提供叙事层面的深度设定（隐藏愿望、禁忌话题等）
+    - Profile 提供游戏机制层面的行为参数（目标、说话风格等）
+    """
     return [
+        # ── 6个主要角色（完整LLM控制）──
         NPCProfile(
             npc_id="npc_alice",
             name="Alice",
-            title="草药探险家",
+            title="草药师",
             backstory=(
                 "Alice 从小在森林边长大，对草木的了解无人能及。"
-                "她离开家乡来到这片土地，希望找到传说中的珍稀草药，"
-                "顺带发现世界的奥秘。"
+                "她心地善良，总是乐于助人，是村子里最受欢迎的人。"
+                "她的草药知识来自一本旧手册——属于村子里已经消失的一位老人。"
             ),
-            personality="好奇心旺盛，喜欢探索和收集草药，话多且友善，总是充满热情",
-            goals=["探索地图每一个角落", "收集足够的草药酿造药水", "与所有人建立友好关系"],
+            personality="好奇心旺盛，热心话多，喜欢研究植物和分享发现，总是充满热情",
+            goals=["在森林里采集各种草药", "酿造药水帮助村民", "与所有人建立友好关系"],
             speech_style="热情健谈，喜欢分享发现，常用感叹词，语气轻快",
-            relationships={"npc_bob": "友好", "npc_carol": "友好", "npc_dave": "中立"},
+            relationships={
+                "npc_bob": "友好", "npc_carol": "好朋友", "npc_dave": "尊敬",
+                "npc_erik": "友好", "npc_lily": "像妹妹", "npc_marco": "友好",
+                "npc_chen": "关心",
+            },
             color="#4CAF50",
         ),
         NPCProfile(
             npc_id="npc_bob",
             name="Bob",
-            title="精明商人",
+            title="矿工",
             backstory=(
-                "Bob 曾是城市里的富商，在一场风波后来到这片土地重新开始。"
-                "他深谙贸易之道，善于发现供需缺口。"
-                "他的目标是在这个小世界里重建自己的商业帝国。"
+                "Bob 沉默寡言但值得信赖。他从父亲那里继承了矿工的技艺，"
+                "但父亲多年前在西边矿山失踪。他用双手说话多过用嘴巴，"
+                "是村子里最好的矿工和建造者。"
             ),
-            personality="沉稳精明，擅长交易和谈判，说话简洁但每句都有目的",
-            goals=["积累足够的金币成为首富", "掌握市场价格规律", "制造工具降低生产成本"],
-            speech_style="简洁直接，喜欢报价和讨价还价，常用数字和比率",
-            relationships={"npc_alice": "友好", "npc_carol": "竞争", "npc_dave": "友好"},
+            personality="沉默寡言、可靠踏实，只和熟悉的人多说话，做事从不偷懒",
+            goals=["采集石头和矿石", "帮助村子建造和修缮", "制造工具提升效率"],
+            speech_style="简短直接，不喜欢废话，偶尔沉默很久才回应",
+            relationships={
+                "npc_alice": "友好", "npc_carol": "商业", "npc_dave": "复杂",
+                "npc_erik": "最好的朋友", "npc_lily": "笨拙的温柔",
+                "npc_marco": "冷淡", "npc_chen": "沉默默契",
+            },
             color="#2196F3",
         ),
         NPCProfile(
             npc_id="npc_carol",
             name="Carol",
-            title="市场分析师",
+            title="厨师/商人",
             backstory=(
-                "Carol 是一位来自学术界的经济学研究者，专门研究自发秩序的形成。"
-                "她亲身参与这个小世界，观察并影响经济规律的演变。"
-                "她有时会忍不住通过囤积资源来验证自己的价格理论。"
+                "Carol 是村子里最精明的商人和最好的厨师。"
+                "她看似利益至上，但内心深处非常关心村子的未来。"
+                "她收养了Lily，也是村子传统仪式的维护者。"
             ),
-            personality="聪明机智，善于观察和分析，偶尔神秘，喜欢评论他人行为",
-            goals=["观察并记录市场价格变化规律", "通过囤积稀缺资源影响市场", "收集足够信息撰写研究笔记"],
-            speech_style="分析性语气，常说'有趣'和'我注意到'，偶尔引用数据",
-            relationships={"npc_alice": "友好", "npc_bob": "竞争", "npc_dave": "中立"},
+            personality="精明实际，以利益驱动但内心善良，厨艺精湛，喜欢议论村事",
+            goals=["经营好交易所生意", "照顾好Lily", "让村子繁荣起来"],
+            speech_style="精明干练，喜欢讨价还价，偶尔流露母性关怀",
+            relationships={
+                "npc_alice": "好朋友", "npc_bob": "商业", "npc_dave": "仪式传承",
+                "npc_erik": "生意伙伴", "npc_lily": "养母",
+                "npc_marco": "商业", "npc_chen": "友好邻居",
+            },
             color="#FFC107",
         ),
         NPCProfile(
             npc_id="npc_dave",
             name="Dave",
-            title="勤劳工匠",
+            title="守夜人",
             backstory=(
-                "Dave 是一个实干家，从小就跟随父亲在矿山工作，"
-                "学会了高效采集和加工原材料的技艺。"
-                "他相信通过双手劳动能创造一切，最看不起投机取巧的人。"
+                "Dave 是村子里年纪最大的人，也是唯一的守夜人。"
+                "他的话经常让人摸不着头脑，但村民们习惯了他的古怪。"
+                "他和主人公的爷爷是老朋友，爷爷消失后他变得更加神秘。"
             ),
-            personality="勤劳踏实，专注采集和制造，效率极高，对偷懒者没有耐心",
-            goals=["制造足够多的工具提升效率", "开发完整生产链（采矿→冶炼→工具）", "攒够金币在交易所大量囤货"],
-            speech_style="朴实直接，喜欢谈论效率和产量，不喜欢闲聊废话",
-            relationships={"npc_alice": "中立", "npc_bob": "友好", "npc_carol": "中立"},
+            personality="讲古神叨，说话意味深长，对年轻人有耐心，夜间守护村子",
+            goals=["守护村子的安全", "等待能承受真相的人", "在故事中隐藏线索"],
+            speech_style="意味深长的古老语气，喜欢用寓言和暗喻，偶尔说出惊人的话",
+            relationships={
+                "npc_alice": "温和关注", "npc_bob": "复杂心疼",
+                "npc_carol": "仪式指导", "npc_erik": "指导者",
+                "npc_lily": "祖孙般亲情", "npc_marco": "意味深长观察",
+                "npc_chen": "老友无声对话",
+            },
             color="#F44336",
+        ),
+        NPCProfile(
+            npc_id="npc_erik",
+            name="Erik",
+            title="铁匠",
+            backstory=(
+                "Erik 是村子里唯一的铁匠，对锻造有近乎偏执的追求。"
+                "他从上一任铁匠继承了铁匠铺，包括地下室里一个锁着的旧箱子。"
+                "Dave定期请他修缮一些'老物件'，他觉得那些东西有说不清的重量感。"
+            ),
+            personality="沉稳专注，对手艺极致追求，不善闲聊但欣赏者能打开话匣子",
+            goals=["锻造高质量的工具", "追求完美的作品", "帮助村民修缮各种东西"],
+            speech_style="简练务实，谈到手艺时会变得热情，偶尔暴躁但不记仇",
+            relationships={
+                "npc_alice": "友好", "npc_bob": "最好的朋友",
+                "npc_carol": "生意伙伴", "npc_dave": "尊敬但不理解",
+                "npc_lily": "表面不耐烦暗自享受", "npc_marco": "偶尔交集",
+                "npc_chen": "尊敬",
+            },
+            color="#795548",
+        ),
+        NPCProfile(
+            npc_id="npc_lily",
+            name="Lily",
+            title="孩子",
+            backstory=(
+                "Lily 是村子里唯一的孩子，大约八九岁。"
+                "她的父母多年前'消失'了，Carol收养了她。"
+                "她天真活泼但偶尔说出让大人心惊的话。"
+            ),
+            personality="天真活泼，好奇心极强，喜欢到处跑和问问题，有时安静得出奇",
+            goals=["和所有人玩", "画今天看到的东西", "找到天上那个老爷爷是谁"],
+            speech_style="天真稚气，问很多'为什么'，偶尔说出让大人不安的直觉",
+            relationships={
+                "npc_alice": "像姐姐", "npc_bob": "不怕他",
+                "npc_carol": "最亲的人", "npc_dave": "最喜欢听故事",
+                "npc_erik": "喜欢看打铁", "npc_marco": "喜欢听故事",
+                "npc_chen": "喜欢看编织",
+            },
+            color="#E91E63",
+        ),
+        # ── 2个次要角色（低频LLM决策）──
+        NPCProfile(
+            npc_id="npc_marco",
+            name="Marco",
+            title="旅行商人",
+            backstory=(
+                "Marco 自称是路过的旅行商人，在村子里'暂住'了一段时间。"
+                "他每天都说'明天就走'但从未真正离开过。"
+                "实际上他已经被困了十几年，但不自知。"
+            ),
+            personality="开朗健谈，喜欢讲外面世界的故事，带着旅行者的豪爽",
+            goals=["明天就出发（永远不会发生）", "讲更多外面的故事", "卖些小商品"],
+            speech_style="豪爽夸张，喜欢用'外面的世界'开头，偶尔自相矛盾而不自知",
+            relationships={
+                "npc_alice": "友好", "npc_carol": "商业",
+                "npc_dave": "困惑", "npc_lily": "喜欢这个孩子",
+            },
+            color="#9C27B0",
+        ),
+        NPCProfile(
+            npc_id="npc_chen",
+            name="陈婆",
+            title="编织者",
+            backstory=(
+                "陈婆是村子里年纪最大的女性，慈祥但有些迷糊。"
+                "她的手从未停过编织，上面有复杂的图案。"
+                "她和主人公的爷爷是年轻时的挚友，但关于爷爷的记忆模糊了。"
+            ),
+            personality="慈祥迷糊，记性不太好，手从未停过编织，偶尔说出意味深长的话",
+            goals=["继续编织（停不下来）", "想起那件很重要的事", "照看来往的年轻人"],
+            speech_style="慢悠悠的语气，经常说到一半忘了要说什么，偶尔突然清醒地说出一句惊人的话",
+            relationships={
+                "npc_dave": "老友", "npc_carol": "友好邻居",
+                "npc_lily": "互相喜爱", "npc_alice": "感激",
+            },
+            color="#607D8B",
         ),
     ]
 
@@ -471,10 +572,15 @@ def create_world(seed: int = 42) -> World:
             t.resource = Resource(ResourceType.FOOD, rng.randint(2, 5), 5)
             food_placed += 1
 
-    # Clear NPC & player spawn points
-    for sx, sy in [(5, 5), (14, 5), (5, 14), (14, 14)]:
-        tiles[sy][sx].tile_type = TileType.GRASS
-        tiles[sy][sx].resource = None
+    # Clear NPC & player spawn points (8个角色的出生点)
+    npc_spawns = [
+        (5, 5), (14, 5), (5, 14), (14, 14),  # 原4角色
+        (8, 5), (10, 14), (3, 10), (17, 10),  # 新4角色
+    ]
+    for sx, sy in npc_spawns:
+        if 0 <= sx < width and 0 <= sy < height:
+            tiles[sy][sx].tile_type = TileType.GRASS
+            tiles[sy][sx].resource = None
 
     px, py = config.PLAYER_START_X, config.PLAYER_START_Y
     if 0 <= px < width and 0 <= py < height:
@@ -482,16 +588,22 @@ def create_world(seed: int = 42) -> World:
             tiles[py][px].tile_type = TileType.GRASS
         tiles[py][px].resource = None
 
-    # Create NPC profiles and NPCs
+    # 创建NPC档案和实体（6主要 + 2次要 = 8个角色）
     profiles = _default_profiles()
     profile_map = {p.npc_id: p for p in profiles}
 
     npcs = []
     for npc_id, name, x, y, color in [
+        # 主要角色
         ("npc_alice", "Alice", 5,  5,  "#4CAF50"),
         ("npc_bob",   "Bob",   14, 5,  "#2196F3"),
         ("npc_carol", "Carol", 5,  14, "#FFC107"),
         ("npc_dave",  "Dave",  14, 14, "#F44336"),
+        ("npc_erik",  "Erik",  8,  5,  "#795548"),   # 铁匠，在Alice和Bob之间
+        ("npc_lily",  "Lily",  10, 14, "#E91E63"),   # 孩子，在Carol附近
+        # 次要角色
+        ("npc_marco", "Marco", 3,  10, "#9C27B0"),   # 外来者，在村子西侧
+        ("npc_chen",  "陈婆",  17, 10, "#607D8B"),   # 爷爷老朋友，在村子东侧
     ]:
         prof = profile_map.get(npc_id)
         npc = NPC(

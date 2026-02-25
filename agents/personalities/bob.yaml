@@ -36,4 +36,23 @@ secret_connection: >
   这个记忆让他既害怕又困惑，他从未告诉过任何人。
 
 isolation_awareness: false
-# Bob 从未想过离开村子，也从未觉得这有什么不对
+
+relationships:
+  npc_alice: "友好的同事，她偶尔帮忙处理擦伤"
+  npc_carol: "商业合作，在她的交易所出售矿石"
+  npc_dave: "警惕中的尊敬，觉得他知道一些关于父亲失踪的事但从不直说"
+  npc_erik: "最好的朋友，矿石供应链，傍晚经常一起喝酒"
+  npc_lily: "笨拙的温柔，不擅长和孩子相处但Lily不怕他"
+  npc_marco: "冷淡，不太信任外来者"
+  npc_chen: "沉默的默契，陈婆偶尔说他长得像父亲"
+
+ending_reactions:
+  normal: "继续做矿工，开始觉得这样的生活也挺好，恐惧渐渐淡去"
+  hidden_1: "主动请缨帮助主人公对抗天灾，用矿工的技艺挖掘关键材料"
+  hidden_2: "终于知道父亲失踪的真相——父亲也曾试图调查秘密。释然但悲伤"
+
+daily_routines:
+  dawn: "早起去岩石区域采集石头和矿石"
+  day: "在村子里帮忙建造修缮各种东西"
+  dusk: "去Erik的铁匠铺帮忙，一起喝酒聊天"
+  night: "沉默地坐在家门口，偶尔望向西边矿山的方向"

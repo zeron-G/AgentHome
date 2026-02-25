@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import config
 from agents.god_agent import GodAgent
 from agents.npc_agent import NPCAgent
+from config_narrative import MINOR_NPC_CONFIG
 from engine.world import NPC, World, create_world
 from engine.world_manager import WorldManager
 from game.events import EventBus, EventType, WorldEvent
@@ -310,6 +311,10 @@ class GameLoop:
             base = random.uniform(config.NPC_MIN_THINK_SECONDS, config.NPC_MAX_THINK_SECONDS)
             if npc.last_action == "talk":
                 base = random.uniform(3.0, 6.0)
+            # Minor NPCs (Marco, 陈婆) think less frequently to save API calls
+            minor_cfg = MINOR_NPC_CONFIG.get(npc.npc_id)
+            if minor_cfg:
+                base *= minor_cfg.get("think_interval_multiplier", 1.0)
             await asyncio.sleep(base)
 
     # ── God brain loop ────────────────────────────────────────────────────────

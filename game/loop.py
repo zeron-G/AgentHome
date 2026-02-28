@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import config
 from agents.god_agent import GodAgent
 from agents.npc_agent import NPCAgent
-from config_narrative import MINOR_NPC_CONFIG
+from config_narrative import DAILY_NPC_CONFIG
 from engine.world import NPC, World, create_world
 from engine.world_manager import WorldManager
 from game.events import EventBus, EventType, WorldEvent
@@ -221,19 +221,23 @@ class GameLoop:
         local_url: str | None = None,
         local_model: str | None = None,
     ):
-        """Switch LLM provider at runtime ('gemini' or 'local')."""
+        """Switch LLM provider at runtime ('claude', 'gemini', or 'local')."""
         config.LLM_PROVIDER = provider
+        if provider == "claude":
+            self.npc_agent.reset_claude_client()
+            self.god_agent.reset_claude_client()
         if local_url:
             config.LOCAL_LLM_BASE_URL = local_url
             self.npc_agent.reset_local_client()
             self.god_agent.reset_local_client()
         if local_model:
             config.LOCAL_LLM_MODEL = local_model
-        logger.info(
-            f"LLM provider → {provider}"
-            + (f"  model={config.LOCAL_LLM_MODEL}  url={config.LOCAL_LLM_BASE_URL}"
-               if provider == "local" else "")
-        )
+        extra = ""
+        if provider == "local":
+            extra = f"  model={config.LOCAL_LLM_MODEL}  url={config.LOCAL_LLM_BASE_URL}"
+        elif provider == "claude":
+            extra = f"  model={config.ANTHROPIC_MODEL}"
+        logger.info(f"LLM provider → {provider}{extra}")
 
     # ── World tick loop ───────────────────────────────────────────────────────
 
@@ -311,10 +315,10 @@ class GameLoop:
             base = random.uniform(config.NPC_MIN_THINK_SECONDS, config.NPC_MAX_THINK_SECONDS)
             if npc.last_action == "talk":
                 base = random.uniform(3.0, 6.0)
-            # Minor NPCs (Marco, 陈婆) think less frequently to save API calls
-            minor_cfg = MINOR_NPC_CONFIG.get(npc.npc_id)
-            if minor_cfg:
-                base *= minor_cfg.get("think_interval_multiplier", 1.0)
+            # 日常NPC（旷/木/岚/石）think频率降低以节省API调用
+            daily_cfg = DAILY_NPC_CONFIG.get(npc.npc_id)
+            if daily_cfg:
+                base *= daily_cfg.get("think_interval_multiplier", 1.0)
             await asyncio.sleep(base)
 
     # ── God brain loop ────────────────────────────────────────────────────────

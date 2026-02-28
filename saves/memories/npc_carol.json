@@ -158,5 +158,53 @@
       6,
       15
     ]
+  },
+  {
+    "record_id": "d84e657d",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 先往食物多的地方走，早点把食物备齐了，才能安心做生意。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235836.4447443,
+    "tick": 5,
+    "location": [
+      5,
+      14
+    ]
+  },
+  {
+    "record_id": "99bd7d98",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 食物就在眼前，先采集食物。Marco在那边，等我忙完再看看他有什么新货。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235845.7102106,
+    "tick": 8,
+    "location": [
+      4,
+      13
+    ]
+  },
+  {
+    "record_id": "8210a2a9",
+    "npc_id": "npc_carol",
+    "content": "行动: move | 想: 我需要食物。看到前面有食物，得赶紧采回来。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235853.17568,
+    "tick": 11,
+    "location": [
+      4,
+      14
+    ]
   }
 ]

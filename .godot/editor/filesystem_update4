@@ -1,0 +1,3 @@
+res://scripts/ui/status_panel.gd
+res://scripts/main_menu.gd
+res://scripts/autoload/game_state.gd

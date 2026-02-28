@@ -3,13 +3,16 @@
 Also serves as the narrative director — the embodiment of the grandfather's
 will. Tracks narrative state, detects when conversations touch key clues,
 and injects hidden hints into player dialogue options.
+
+角色设定：爷爷 (IV 皇帝) — 用灵魂与恶魔签订契约的守护者。
+6结局系统：失败/巩固/推翻/替代(4A)/扭曲(4B)/觉醒/真结局·世界
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.base_agent import BaseAgent
 from agents.prompts import (
@@ -17,7 +20,9 @@ from agents.prompts import (
     GOD_SYSTEM_PROMPT,
     build_god_context,
     build_god_hint_prompt,
+    _load_personality,
 )
+from config_narrative import ALL_NPC_IDS, SEASON_CONFIG, ENDING_CONDITIONS
 from engine.world import GodEntity, World
 from game.token_tracker import TokenTracker
 
@@ -28,53 +33,80 @@ logger = logging.getLogger(__name__)
 # Each entry maps a keyword group to (clue_id, default_hint_level, hint_context).
 # hint_context gives the LLM background on what the clue is about so it can
 # craft an appropriate hidden hint.
+#
+# 线索体系对齐 config_narrative.CLUE_DEFINITIONS（12条线索）
 
 NARRATIVE_CLUE_KEYWORDS: dict[str, tuple[str, str, str]] = {
     # keyword → (clue_id, hint_level, hint_context_for_llm)
-    # ── 原有线索 ──
-    "矿山": ("mine", "subtle", "西边有一座被废弃的矿山，矿山关闭那年发生了异常的事件"),
-    "矿区": ("mine", "subtle", "西边有一座被废弃的矿山，矿山关闭那年发生了异常的事件"),
-    "废弃": ("mine", "subtle", "村子西边有废弃的建筑，那里藏着过去的秘密"),
-    "老协议": ("pact", "cryptic", "很久以前有人与恶魔签下了契约，用灵魂保护了村子但付出了代价"),
-    "约定": ("pact", "cryptic", "很久以前有人与恶魔签下了契约，保护了村子但付出了代价"),
-    "承诺": ("pact", "subtle", "有人曾经做出了重大的承诺来保护这个地方"),
-    "契约": ("pact", "cryptic", "一份用灵魂为代价的契约，保护了村子但也封锁了一切"),
-    "离开": ("isolation", "subtle", "村子被结界封锁着，没有人能离开也没有外人能进入"),
-    "外面": ("isolation", "subtle", "村子与外界之间存在着看不见的结界"),
-    "城市": ("isolation", "subtle", "村子之外的世界对村民来说像是一个模糊的概念"),
-    "外界": ("isolation", "subtle", "村子被结界与外界隔绝了"),
-    "爷爷": ("grandpa", "subtle", "爷爷并没有真正离开，他以另一种形式守护着村子"),
-    "老人": ("grandpa", "subtle", "村子里曾经有一位老人，他知道所有的秘密"),
-    "消失": ("grandpa", "cryptic", "有些人的'消失'并不意味着他们真的离开了"),
-    "红雪": ("omen", "cryptic", "红雪是天灾即将来临的前兆，上一次出现是在矿山关闭那年"),
-    "西边": ("west", "subtle", "村子西边有被遗忘的秘密——废弃的农庄和矿山都在那个方向"),
-    "废弃农庄": ("west", "subtle", "废弃农庄里可能藏着解开秘密的关键线索"),
-    "仪式": ("ritual", "cryptic", "村子里延续的仪式实际上与恶魔契约有关"),
-    "传统": ("ritual", "subtle", "某些被当作传统的习俗实际上有更深层的含义"),
-    "食物消失": ("ritual", "cryptic", "每年放在村中心的食物总是消失——是谁在吃？"),
-    "地图": ("map", "subtle", "有一张古老的地图指向村子里被遗忘的区域"),
-    "手册": ("map", "subtle", "草药手册里夹着的不只是植物的知识"),
-    "碎片": ("map", "subtle", "地图碎片拼合后也许能找到某个重要的位置"),
-    # ── 新增线索（适配新角色 Erik/Lily/Marco/陈婆）──
-    "锻造": ("forge", "subtle", "铁匠修缮的某些东西不是普通的装饰品，它们有特殊的用途"),
-    "老物件": ("forge", "subtle", "那些老物件拿在手里有温度，像是有什么东西活在金属里"),
-    "修缮": ("forge", "subtle", "定期修缮的老物件维护着某种看不见的力量"),
-    "箱子": ("forge_notes", "cryptic", "铁匠铺地下室的箱子里藏着解开一切的关键"),
-    "笔记": ("forge_notes", "cryptic", "那些手写的笔记记录了法阵组件的制作方法"),
-    "图纸": ("forge_notes", "cryptic", "图纸上的图案和村子里某些东西惊人地相似"),
-    "梦": ("guardian_sight", "subtle", "梦境有时候比现实更接近真相"),
-    "夜里": ("guardian_sight", "subtle", "夜晚的天空中也许不只有星星在看着这个村子"),
-    "天上": ("guardian_sight", "subtle", "天空中那双温柔的眼睛属于一个深爱着这里的人"),
-    "眼睛": ("guardian_sight", "subtle", "有人一直在看着你们，守护着你们"),
-    "明天走": ("time_warp", "subtle", "有些明天永远不会到来，有些旅途永远不会结束"),
-    "旅行": ("time_warp", "subtle", "时间在这个村子里流淌的方式也许和外面不同"),
-    "多久了": ("time_warp", "subtle", "记忆中的时间和真实的时间也许差了很多很多年"),
-    "编织": ("weaving", "cryptic", "那些编织的图案不是随手画出来的，它们来自深处的记忆"),
-    "绳子": ("weaving", "cryptic", "编织的纹路和某种古老的阵法有着惊人的相似"),
-    "图案": ("weaving", "cryptic", "这些图案出现在不止一个地方——编织、锻造、地图"),
-    "恶魔": ("demon", "cryptic", "一切来自恶魔的力量都有代价，而代价往往是你最珍视的东西"),
-    "力量": ("demon", "cryptic", "守护的力量来自黑暗，但使用它的人怀着最深的爱"),
-    "代价": ("demon", "cryptic", "灵魂、自由、记忆……代价从来不止一种"),
+
+    # ── 结界与封锁 ──
+    "离开": ("barrier_edge", "subtle", "村子被结界封锁着，没有人能离开也没有外人能进入"),
+    "外面": ("barrier_edge", "subtle", "村子与外界之间存在着看不见的结界"),
+    "城市": ("barrier_edge", "subtle", "村子之外的世界对村民来说像是一个模糊的概念"),
+    "外界": ("barrier_edge", "subtle", "村子被结界与外界隔绝了"),
+    "边界": ("barrier_edge", "subtle", "村子的边缘有一道看不见的墙"),
+
+    # ── 爷爷与契约 ──
+    "爷爷": ("grandpa_trace", "subtle", "爷爷并没有真正离开，他以另一种形式守护着村子"),
+    "老人": ("grandpa_trace", "subtle", "村子里曾经有一位老人，他知道所有的秘密"),
+    "消失": ("grandpa_trace", "cryptic", "有些人的'消失'并不意味着他们真的离开了"),
+    "契约": ("soul_contract", "cryptic", "一份用灵魂为代价的契约，保护了村子但也封锁了一切"),
+    "老协议": ("soul_contract", "cryptic", "很久以前有人与恶魔签下了契约，用灵魂保护了村子"),
+    "约定": ("soul_contract", "cryptic", "很久以前有人与恶魔签下了契约，保护了村子但付出了代价"),
+    "承诺": ("soul_contract", "subtle", "有人曾经做出了重大的承诺来保护这个地方"),
+
+    # ── 认知屏障 ──
+    "记不清": ("cognitive_fog", "subtle", "村民的记忆被模糊了——他们记不住不该记住的事"),
+    "忘了": ("cognitive_fog", "subtle", "遗忘不是偶然的，而是结界对心智的保护"),
+    "奇怪": ("cognitive_fog", "subtle", "如果你觉得什么事情不对劲，也许是因为真的有什么不对劲"),
+
+    # ── 木的法阵维护 ──
+    "修缮": ("array_maintenance", "subtle", "定期修缮的老物件维护着某种看不见的力量"),
+    "老物件": ("array_maintenance", "subtle", "那些老物件拿在手里有温度，像是有什么东西活在其中"),
+    "锻造": ("array_maintenance", "subtle", "工匠修缮的某些东西不是普通的器具，它们有特殊的用途"),
+    "工具": ("array_maintenance", "subtle", "木的工具箱里有刻着神秘符号的家伙——他以为是传家宝"),
+    "符号": ("array_maintenance", "cryptic", "这些符号出现在不止一个地方——工具、建筑、地图"),
+
+    # ── 穗的感知 ──
+    "天上": ("sui_perception", "subtle", "天空中也许不只有星星在看着这个村子"),
+    "老爷爷": ("sui_perception", "subtle", "穗说的'天上的老爷爷'也许不只是孩子的想象"),
+    "眼睛": ("sui_perception", "subtle", "有人一直在看着你们，守护着你们"),
+    "梦": ("sui_perception", "subtle", "梦境有时候比现实更接近真相"),
+
+    # ── 棠的交易 ──
+    "等": ("tang_deal", "subtle", "棠在等的不只是一个人——他在等一个答案"),
+    "交易": ("tang_deal", "cryptic", "有人已经和恶魔做了一笔交易，代价是被吊在两个世界之间"),
+    "看见": ("tang_deal", "cryptic", "看见真相的力量有代价——清醒也可以是一种折磨"),
+
+    # ── 岚婆的直觉 ──
+    "通灵": ("lan_intuition", "subtle", "岚婆的大部分通灵是表演——但有些不是"),
+    "占卜": ("lan_intuition", "subtle", "占卜的结果有时准得可怕——她自己也害怕"),
+    "直觉": ("lan_intuition", "subtle", "有些人的直觉能绕过结界的认知屏障"),
+
+    # ── 商人/恶魔 ──
+    "恶魔": ("demon_nature", "cryptic", "一切来自恶魔的力量都有代价，而代价往往是你最珍视的东西"),
+    "代价": ("demon_nature", "cryptic", "灵魂、自由、记忆……代价从来不止一种"),
+    "商人": ("merchant_identity", "subtle", "商人是唯一能自由进出村子的外来者——为什么？"),
+
+    # ── 仪式与传统 ──
+    "仪式": ("ritual_truth", "cryptic", "村子里延续的仪式实际上与恶魔契约有关"),
+    "传统": ("ritual_truth", "subtle", "某些被当作传统的习俗实际上有更深层的含义"),
+    "食物消失": ("ritual_truth", "cryptic", "每年放在村中心的食物总是消失——是谁在吃？"),
+
+    # ── 时间与轮回 ──
+    "多久了": ("reincarnation", "subtle", "记忆中的时间和真实的时间也许差了很多很多年"),
+    "轮回": ("reincarnation", "cryptic", "也许这不是你第一次来到这个村子"),
+    "竖线": ("reincarnation", "cryptic", "山的屋子里有一面墙，上面的竖线多到数不清——每一条是一个春天"),
+
+    # ── 禾丈夫之死 ──
+    "丈夫": ("he_husband_death", "subtle", "禾的丈夫曾试图离开村子——然后他死了"),
+    "爸爸": ("he_husband_death", "subtle", "穗的爸爸去了哪里？禾说'他走了'——但走向了哪里？"),
+
+    # ── 地图与废弃区域 ──
+    "地图": ("map_fragments", "subtle", "有一张古老的地图指向村子里被遗忘的区域"),
+    "碎片": ("map_fragments", "subtle", "地图碎片拼合后也许能找到某个重要的位置"),
+    "西边": ("map_fragments", "subtle", "村子西边有被遗忘的秘密"),
+    "废弃": ("map_fragments", "subtle", "废弃的区域里可能藏着解开秘密的关键线索"),
 }
 
 
@@ -85,13 +117,18 @@ class _DialogueOptions(BaseModel):
 class NarrativeState(BaseModel):
     """Serializable narrative progression state.
 
-    Tracks the player's journey through the story — trust level, discovered
-    clues, current stage, and which keywords have triggered hints.
+    Tracks the player's journey through the story — per-NPC trust, discovered
+    clues, current stage/season, and which keywords have triggered hints.
     """
-    player_trust_level: int = 0       # 0-100, based on player-NPC interaction depth
+    # Per-NPC trust (0-100 each), replaces old global trust
+    npc_trust: dict[str, int] = Field(
+        default_factory=lambda: {npc_id: 50 for npc_id in ALL_NPC_IDS}
+    )
     clues_revealed: list[str] = []    # list of clue_ids that have been revealed
-    secret_stage: int = 0             # 0=normal, 1=anomalies, 2=fragments, 3=truth
+    secret_stage: int = 0             # 0=spring, 1=summer, 2=autumn, 3=winter
+    current_season: str = "spring"    # tracks current season key
     hint_triggers: dict[str, int] = {}  # clue_id → number of times triggered
+    endings_unlocked: list[str] = []  # ending keys that have been unlocked
 
     def to_dict(self) -> dict:
         """Serialize for save/load."""
@@ -101,6 +138,12 @@ class NarrativeState(BaseModel):
     def from_dict(cls, d: dict) -> "NarrativeState":
         return cls(**d)
 
+    def average_trust(self) -> float:
+        """Return average trust across all NPCs."""
+        if not self.npc_trust:
+            return 50.0
+        return sum(self.npc_trust.values()) / len(self.npc_trust)
+
 
 class GodAgent(BaseAgent):
     def __init__(self, token_tracker: TokenTracker):
@@ -108,13 +151,25 @@ class GodAgent(BaseAgent):
         self.narrative_state = NarrativeState()
 
     async def process(self, god: GodEntity, world: World) -> dict | None:
-        """Build world context for God, call Gemini, return action dict or None."""
+        """Build world context for God, call LLM, return action dict or None."""
         if god.is_processing:
             return None
 
         god.is_processing = True
         try:
             system_prompt = GOD_SYSTEM_PROMPT.format(personality=god.personality)
+
+            # Inject season-aware commentary style from god.yaml
+            god_personality = _load_personality("npc_god")
+            if god_personality:
+                stage = self.narrative_state.secret_stage
+                styles = god_personality.get("commentary_styles", {})
+                style_key = f"stage_{stage}"
+                style = styles.get(style_key, styles.get("stage_0", ""))
+                if style:
+                    season = self.narrative_state.current_season
+                    system_prompt += f"\n\n【当前季节：{season}】旁白风格：{style}"
+
             context_msg = build_god_context(god, world)
 
             result = await self.call_llm(
@@ -244,11 +299,14 @@ class GodAgent(BaseAgent):
 
     # ── Narrative state management ─────────────────────────────────────────
 
-    def update_trust_level(self, delta: int):
-        """Adjust the player's trust level (clamped to 0-100)."""
-        self.narrative_state.player_trust_level = max(
-            0, min(100, self.narrative_state.player_trust_level + delta)
-        )
+    def update_npc_trust(self, npc_id: str, delta: int):
+        """Adjust a specific NPC's trust level (clamped to 0-100)."""
+        current = self.narrative_state.npc_trust.get(npc_id, 50)
+        self.narrative_state.npc_trust[npc_id] = max(0, min(100, current + delta))
+
+    def get_npc_trust(self, npc_id: str) -> int:
+        """Get a specific NPC's trust level."""
+        return self.narrative_state.npc_trust.get(npc_id, 50)
 
     def reveal_clue(self, clue_id: str):
         """Mark a clue as revealed if not already."""
@@ -261,6 +319,60 @@ class GodAgent(BaseAgent):
         if stage > self.narrative_state.secret_stage:
             self.narrative_state.secret_stage = stage
             logger.info(f"[God/Narrative] Secret stage advanced to {stage}")
+
+    def update_season(self, day: int):
+        """Update current season based on in-game day number."""
+        for season_key, cfg in SEASON_CONFIG.items():
+            start, end = cfg["day_range"]
+            if start <= day <= end:
+                if self.narrative_state.current_season != season_key:
+                    self.narrative_state.current_season = season_key
+                    self.narrative_state.secret_stage = cfg["secret_stage"]
+                    logger.info(f"[God/Narrative] Season changed to {cfg['name']}")
+                break
+
+    def check_ending_conditions(self) -> Optional[str]:
+        """Check if any ending condition is met. Returns ending key or None.
+
+        Checks endings in priority order. Some endings require others to be
+        unlocked first (e.g., trade endings require reinforce or overthrow).
+        """
+        state = self.narrative_state
+        for ending_key, condition in ENDING_CONDITIONS.items():
+            # Check prerequisite endings
+            prereqs = condition.get("unlock_requirement")
+            if prereqs:
+                if not any(p in state.endings_unlocked for p in prereqs):
+                    continue
+
+            # Check minimum clue count
+            min_clues = condition.get("min_clues_revealed", 0)
+            if len(state.clues_revealed) < min_clues:
+                continue
+
+            # Check trust requirements (if any)
+            trust_req = condition.get("trust_requirement")
+            if trust_req:
+                for npc_id, threshold in trust_req.items():
+                    if state.npc_trust.get(npc_id, 50) < threshold:
+                        break
+                else:
+                    # All trust requirements met
+                    return ending_key
+                continue  # Some trust requirement not met
+
+            # If no trust requirement, check stage
+            min_stage = condition.get("min_stage", 0)
+            if state.secret_stage >= min_stage:
+                return ending_key
+
+        return None
+
+    def unlock_ending(self, ending_key: str):
+        """Record that an ending has been unlocked (for prerequisite tracking)."""
+        if ending_key not in self.narrative_state.endings_unlocked:
+            self.narrative_state.endings_unlocked.append(ending_key)
+            logger.info(f"[God/Narrative] Ending unlocked: {ending_key}")
 
     def get_narrative_state_dict(self) -> dict:
         """Return serializable narrative state for save/load."""

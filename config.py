@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# LLM provider: "gemini" (cloud) or "local" (OpenAI-compatible local server)
-LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")
+# LLM provider: "claude" (Anthropic) or "gemini" (Google) or "local" (OpenAI-compatible)
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "claude")
 
 # ── Market System ─────────────────────────────────────────────────────────────
 
@@ -60,6 +60,13 @@ ITEM_EFFECTS: dict = {
     "tool":   {"gather_bonus": 2},      # gather yields ×2 while held
     "rope":   {"move_energy_save": 1},  # move costs 1 less energy
 }
+
+# Anthropic / Claude
+# auth_token 优先 — 通过 `claude setup-token` 获取订阅令牌（Bearer 认证）
+# 如果 auth_token 为空，则退回到 api_key（console.anthropic.com API 密钥）
+ANTHROPIC_AUTH_TOKEN: str = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 # Gemini (cloud)
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")

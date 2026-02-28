@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import config
+from config_narrative import SEASON_CONFIG
 from engine.world import ResourceType, TileType, World
 from game.events import WorldEvent
 from game.token_tracker import TokenTracker
@@ -36,18 +37,11 @@ class WorldSerializer:
             "type": "world_state",
             "tick": world.time.tick,
             "simulation_running": simulation_running,
-            "time": {
-                "hour": round(world.time.hour, 1),
-                "day": world.time.day,
-                "phase": world.time.phase,
-                "time_str": world.time.time_str,
-            },
+            "time": self._serialize_time(world),
             "weather": world.weather.value,
             "tiles": self._serialize_tiles(world),
             "npcs": [self._serialize_npc(npc) for npc in world.npcs],
-            "god": {
-                "commentary": world.god.last_commentary,
-            },
+            "god": self._serialize_god(world),
             "events": [e.to_dict(world) for e in (events or [])],
             "token_usage": token_tracker.snapshot(),
             "settings": self._serialize_settings(),
@@ -106,6 +100,9 @@ class WorldSerializer:
             # Hierarchical decision-making state (Level-1 strategic layer)
             "goal": getattr(npc, "goal", ""),
             "plan": list(getattr(npc, "plan", [])),
+            # Emotional state & observation feedback
+            "mood": getattr(npc, "mood", ""),
+            "last_action_result": getattr(npc, "last_action_result", ""),
         }
         # Conditionally include inner thought
         if config.SHOW_NPC_THOUGHTS and getattr(npc, "last_thought", ""):
@@ -152,6 +149,7 @@ class WorldSerializer:
             "equipped": getattr(player, "equipped", None),
             "inv_count": player.inventory.total_items(),
             "inv_max": config.INVENTORY_MAX_SLOTS,
+            "last_action_result": getattr(player, "last_action_result", ""),
             "dialogue": latest_dialogue,
         }
 
@@ -173,6 +171,40 @@ class WorldSerializer:
             "history": {item: list(hist) for item, hist in market.history.items()},
             "last_update_tick": market.last_update_tick,
         }
+
+    def _serialize_time(self, world: World) -> dict:
+        """Time data with season information."""
+        time_dict = {
+            "hour": round(world.time.hour, 1),
+            "day": world.time.day,
+            "phase": world.time.phase,
+            "time_str": world.time.time_str,
+        }
+        # Derive season from day using SEASON_CONFIG
+        day = world.time.day
+        for season_key, cfg in SEASON_CONFIG.items():
+            lo, hi = cfg["day_range"]
+            if lo <= day <= hi:
+                time_dict["season"] = season_key
+                time_dict["season_name"] = cfg["name"]
+                break
+        else:
+            time_dict["season"] = "spring"
+            time_dict["season_name"] = "春·播种"
+        return time_dict
+
+    def _serialize_god(self, world: World) -> dict:
+        """God entity state including narrative progression."""
+        god_dict: dict = {
+            "commentary": world.god.last_commentary,
+        }
+        # Include narrative state if the god agent exposes it
+        god_agent = getattr(world, "_god_agent_ref", None)
+        if god_agent and hasattr(god_agent, "narrative_state"):
+            ns = god_agent.narrative_state
+            god_dict["season"] = ns.current_season
+            god_dict["narrative_stage"] = ns.secret_stage
+        return god_dict
 
     def _serialize_settings(self) -> dict:
         """Current hot-modifiable settings for client sync."""

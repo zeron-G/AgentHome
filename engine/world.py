@@ -262,6 +262,10 @@ class NPC:
     plan: list = field(default_factory=list)  # ordered list of plan-step strings
     strategy_tick: int = -999          # world tick when strategy was last generated
 
+    # ── Observation feedback & emotional state ───────────────────────────
+    last_action_result: str = ""       # natural-language result of the last action
+    mood: str = ""                     # current emotional state (set by strategic layer)
+
 
 @dataclass
 class Player:
@@ -277,6 +281,7 @@ class Player:
     last_message: str = ""
     inbox: list = field(default_factory=list)
     equipped: Optional[str] = None  # "tool" | "rope" | None
+    last_action_result: str = ""  # natural-language result of the last action
     dialogue_queue: list = field(default_factory=list)  # pending NPC→player dialogues
 
 
@@ -329,167 +334,190 @@ class World:
 # ── Default NPC Profiles ──────────────────────────────────────────────────────
 
 def _default_profiles() -> list[NPCProfile]:
-    """创建所有NPC的默认档案（8个角色：6主要+2次要）。
+    """创建所有NPC的默认档案（9个角色：4核心+4日常+1特殊）。
 
+    基于 narrative-design.md (2026-02-26) 的11角色22塔罗体系。
     角色设定与 agents/personalities/*.yaml 配合使用：
     - YAML 文件提供叙事层面的深度设定（隐藏愿望、禁忌话题等）
     - Profile 提供游戏机制层面的行为参数（目标、说话风格等）
     """
     return [
-        # ── 6个主要角色（完整LLM控制）──
+        # ── 4个核心角色（高频LLM控制）──
         NPCProfile(
-            npc_id="npc_alice",
-            name="Alice",
-            title="草药师",
+            npc_id="npc_he",
+            name="禾",
+            title="母亲",
             backstory=(
-                "Alice 从小在森林边长大，对草木的了解无人能及。"
-                "她心地善良，总是乐于助人，是村子里最受欢迎的人。"
-                "她的草药知识来自一本旧手册——属于村子里已经消失的一位老人。"
+                "禾是村里的单亲妈妈，丈夫数年前去世。"
+                "她温暖包容，是村子的情感核心，生命力旺盛。"
+                "暗线：丈夫的死亡原因与结界有关。"
             ),
-            personality="好奇心旺盛，热心话多，喜欢研究植物和分享发现，总是充满热情",
-            goals=["在森林里采集各种草药", "酿造药水帮助村民", "与所有人建立友好关系"],
-            speech_style="热情健谈，喜欢分享发现，常用感叹词，语气轻快",
+            personality="温暖包容，生命力旺盛，对女儿有过度保护倾向，是村子的情感中心",
+            goals=["照顾好穗", "维持村子的日常生活", "让村子重新繁荣"],
+            speech_style="温柔但坚定，偶尔因穗的奇怪言行而焦虑，谈到丈夫时沉默",
             relationships={
-                "npc_bob": "友好", "npc_carol": "好朋友", "npc_dave": "尊敬",
-                "npc_erik": "友好", "npc_lily": "像妹妹", "npc_marco": "友好",
-                "npc_chen": "关心",
+                "npc_sui": "母女·过度保护", "npc_shan": "尊敬",
+                "npc_tang": "关心", "npc_mu": "邻居",
+                "npc_lan": "邻居", "npc_shi": "不知道他的感情",
+                "npc_kuang": "像自己的孩子", "npc_shangren": "正常交易",
             },
             color="#4CAF50",
         ),
         NPCProfile(
-            npc_id="npc_bob",
-            name="Bob",
-            title="矿工",
+            npc_id="npc_sui",
+            name="穗",
+            title="女儿",
             backstory=(
-                "Bob 沉默寡言但值得信赖。他从父亲那里继承了矿工的技艺，"
-                "但父亲多年前在西边矿山失踪。他用双手说话多过用嘴巴，"
-                "是村子里最好的矿工和建造者。"
+                "穗是禾的女儿，年约八九岁。"
+                "她天真活泼，直觉清澈，能感知到大人感知不到的东西。"
+                "是村子里最接近爷爷（God）的凡人。"
             ),
-            personality="沉默寡言、可靠踏实，只和熟悉的人多说话，做事从不偷懒",
-            goals=["采集石头和矿石", "帮助村子建造和修缮", "制造工具提升效率"],
-            speech_style="简短直接，不喜欢废话，偶尔沉默很久才回应",
+            personality="天真活泼，直觉穿透一切，偶尔说出让大人心惊的话，没有话题禁区",
+            goals=["和所有人玩", "画今天看到的东西", "找到天上那个老爷爷是谁"],
+            speech_style="天真稚气，问很多'为什么'，偶尔安静地说出直觉——让周围的大人不安",
             relationships={
-                "npc_alice": "友好", "npc_carol": "商业", "npc_dave": "复杂",
-                "npc_erik": "最好的朋友", "npc_lily": "笨拙的温柔",
-                "npc_marco": "冷淡", "npc_chen": "沉默默契",
+                "npc_he": "最亲的人·妈妈", "npc_kuang": "玩伴",
+                "npc_lan": "喜欢听她讲故事", "npc_tang": "喜欢棠哥哥",
+                "npc_mu": "喜欢看木爷爷修东西", "npc_shan": "觉得山爷爷很深沉",
+                "npc_shi": "觉得石叔叔每次看妈妈都脸红",
             },
-            color="#2196F3",
+            color="#E91E63",
         ),
         NPCProfile(
-            npc_id="npc_carol",
-            name="Carol",
-            title="厨师/商人",
+            npc_id="npc_shan",
+            name="山",
+            title="老村长",
             backstory=(
-                "Carol 是村子里最精明的商人和最好的厨师。"
-                "她看似利益至上，但内心深处非常关心村子的未来。"
-                "她收养了Lily，也是村子传统仪式的维护者。"
+                "山是年迈的村长，在村子最中心住了一辈子。"
+                "他掌握全部真相——爷爷的契约、恶魔的存在、轮回的秘密。"
+                "他选择沉默，因为有些真相不该太早出现。"
             ),
-            personality="精明实际，以利益驱动但内心善良，厨艺精湛，喜欢议论村事",
-            goals=["经营好交易所生意", "照顾好Lily", "让村子繁荣起来"],
-            speech_style="精明干练，喜欢讨价还价，偶尔流露母性关怀",
+            personality="深沉智慧，极度耐心，每句话都经过千百遍考量，说话像谜语",
+            goals=["等待主角准备好", "在有生之年看到不同的结果", "守护真相直到合适的时机"],
+            speech_style="意味深长，喜欢用寓言和暗喻，偶尔突然说出半句话又沉默",
             relationships={
-                "npc_alice": "好朋友", "npc_bob": "商业", "npc_dave": "仪式传承",
-                "npc_erik": "生意伙伴", "npc_lily": "养母",
-                "npc_marco": "商业", "npc_chen": "友好邻居",
-            },
-            color="#FFC107",
-        ),
-        NPCProfile(
-            npc_id="npc_dave",
-            name="Dave",
-            title="守夜人",
-            backstory=(
-                "Dave 是村子里年纪最大的人，也是唯一的守夜人。"
-                "他的话经常让人摸不着头脑，但村民们习惯了他的古怪。"
-                "他和主人公的爷爷是老朋友，爷爷消失后他变得更加神秘。"
-            ),
-            personality="讲古神叨，说话意味深长，对年轻人有耐心，夜间守护村子",
-            goals=["守护村子的安全", "等待能承受真相的人", "在故事中隐藏线索"],
-            speech_style="意味深长的古老语气，喜欢用寓言和暗喻，偶尔说出惊人的话",
-            relationships={
-                "npc_alice": "温和关注", "npc_bob": "复杂心疼",
-                "npc_carol": "仪式指导", "npc_erik": "指导者",
-                "npc_lily": "祖孙般亲情", "npc_marco": "意味深长观察",
-                "npc_chen": "老友无声对话",
+                "npc_mu": "指导·让木修缮法阵组件", "npc_tang": "观察·知道棠的交易",
+                "npc_he": "关心", "npc_sui": "深沉的注视",
+                "npc_lan": "尊重", "npc_shangren": "警惕·知道商人真身",
+                "npc_shi": "温和", "npc_kuang": "宽容",
             },
             color="#F44336",
         ),
         NPCProfile(
-            npc_id="npc_erik",
-            name="Erik",
-            title="铁匠",
+            npc_id="npc_tang",
+            name="棠",
+            title="玩伴",
             backstory=(
-                "Erik 是村子里唯一的铁匠，对锻造有近乎偏执的追求。"
-                "他从上一任铁匠继承了铁匠铺，包括地下室里一个锁着的旧箱子。"
-                "Dave定期请他修缮一些'老物件'，他觉得那些东西有说不清的重量感。"
+                "棠是主角童年时的玩伴，一直留在村子里等主角回来。"
+                "他曾与商人做了交易，请求'看到真相的力量'，代价是在真相揭示时被倒悬。"
+                "他的认知屏障已部分破碎，比其他村民更清醒，但清醒带来痛苦。"
             ),
-            personality="沉稳专注，对手艺极致追求，不善闲聊但欣赏者能打开话匣子",
-            goals=["锻造高质量的工具", "追求完美的作品", "帮助村民修缮各种东西"],
-            speech_style="简练务实，谈到手艺时会变得热情，偶尔暴躁但不记仇",
+            personality="对朋友忠诚到极致，焦虑但努力隐藏，对世界有旁观者的洞察力",
+            goals=["等主角回来", "弄清商人的真实身份", "找到离开的方法——不是为自己"],
+            speech_style="表面开朗热情，但时常走神看向村子边缘，谈到商人时紧张回避",
             relationships={
-                "npc_alice": "友好", "npc_bob": "最好的朋友",
-                "npc_carol": "生意伙伴", "npc_dave": "尊敬但不理解",
-                "npc_lily": "表面不耐烦暗自享受", "npc_marco": "偶尔交集",
-                "npc_chen": "尊敬",
+                "npc_shangren": "紧张·交易过", "npc_shan": "困惑·觉得山知道什么",
+                "npc_he": "被禾关心", "npc_sui": "喜欢穗",
+                "npc_shi": "同龄相识", "npc_mu": "尊敬",
+                "npc_lan": "回避", "npc_kuang": "笨拙照顾",
+            },
+            color="#FF5722",
+        ),
+        # ── 4个日常角色（低频LLM决策）──
+        NPCProfile(
+            npc_id="npc_kuang",
+            name="旷",
+            title="小男孩",
+            backstory=(
+                "旷是村里的小男孩，约十到十二岁。"
+                "他大胆直接，什么都不怕，不受认知屏障影响。"
+                "他的无心之举经常触发关键场景。"
+            ),
+            personality="大胆直接，用行动代替言语，对一切充满好奇，什么都敢做",
+            goals=["到处探险", "跟着石叔叔学打猎", "看看那些大人不让去的地方"],
+            speech_style="精力充沛，说话不拐弯，偶尔无心说出让大人尴尬的真话",
+            relationships={
+                "npc_sui": "玩伴", "npc_shi": "崇拜",
+                "npc_mu": "好奇他的工具", "npc_he": "像妈妈一样的人",
+                "npc_shan": "觉得山爷爷家里有秘密",
+            },
+            color="#2196F3",
+        ),
+        NPCProfile(
+            npc_id="npc_mu",
+            name="木",
+            title="老工匠",
+            backstory=(
+                "木是村里经验最丰富的工匠，负责维护所有建筑和设施。"
+                "他严谨守旧，工具箱里有一套奇异的符文工具。"
+                "他不知道自己每一次修缮都在加固爷爷的法阵。"
+            ),
+            personality="严谨守旧，对传统深度尊重，技艺精湛，谈到手艺时话会变多",
+            goals=["维护好村子的建筑", "把手艺传下去", "完成山交代的修缮任务"],
+            speech_style="简练务实，谈到手艺时热情，对质疑传统的话题反应强烈",
+            relationships={
+                "npc_shan": "执行山的修缮指示", "npc_he": "邻居",
+                "npc_kuang": "对他好奇心的宽容", "npc_lan": "邻居",
+                "npc_shi": "修工具的关系", "npc_shangren": "偶尔交易",
             },
             color="#795548",
         ),
         NPCProfile(
-            npc_id="npc_lily",
-            name="Lily",
-            title="孩子",
+            npc_id="npc_lan",
+            name="岚婆",
+            title="神婆",
             backstory=(
-                "Lily 是村子里唯一的孩子，大约八九岁。"
-                "她的父母多年前'消失'了，Carol收养了她。"
-                "她天真活泼但偶尔说出让大人心惊的话。"
+                "岚婆是村里的神婆，会一些'通灵'把戏，大多是骗人的。"
+                "但她不知道自己的通灵是真实的——她说的模糊的话比她意识到的更接近真相。"
+                "她是石的母亲。"
             ),
-            personality="天真活泼，好奇心极强，喜欢到处跑和问问题，有时安静得出奇",
-            goals=["和所有人玩", "画今天看到的东西", "找到天上那个老爷爷是谁"],
-            speech_style="天真稚气，问很多'为什么'，偶尔说出让大人不安的直觉",
+            personality="善于制造神秘感，对人心理把握准确，有意无意间说出真相",
+            goals=["继续'通灵表演'", "照顾好石", "弄清那些不请自来的感知是什么"],
+            speech_style="神秘兮兮，故弄玄虚，但偶尔突然用不是自己的声音说出一句话——然后自己也害怕",
             relationships={
-                "npc_alice": "像姐姐", "npc_bob": "不怕他",
-                "npc_carol": "最亲的人", "npc_dave": "最喜欢听故事",
-                "npc_erik": "喜欢看打铁", "npc_marco": "喜欢听故事",
-                "npc_chen": "喜欢看编织",
-            },
-            color="#E91E63",
-        ),
-        # ── 2个次要角色（低频LLM决策）──
-        NPCProfile(
-            npc_id="npc_marco",
-            name="Marco",
-            title="旅行商人",
-            backstory=(
-                "Marco 自称是路过的旅行商人，在村子里'暂住'了一段时间。"
-                "他每天都说'明天就走'但从未真正离开过。"
-                "实际上他已经被困了十几年，但不自知。"
-            ),
-            personality="开朗健谈，喜欢讲外面世界的故事，带着旅行者的豪爽",
-            goals=["明天就出发（永远不会发生）", "讲更多外面的故事", "卖些小商品"],
-            speech_style="豪爽夸张，喜欢用'外面的世界'开头，偶尔自相矛盾而不自知",
-            relationships={
-                "npc_alice": "友好", "npc_carol": "商业",
-                "npc_dave": "困惑", "npc_lily": "喜欢这个孩子",
+                "npc_shi": "母子·担心他", "npc_sui": "感知上的共鸣",
+                "npc_he": "邻居", "npc_shan": "尊重",
+                "npc_mu": "邻居", "npc_tang": "直觉上觉得他不对劲",
             },
             color="#9C27B0",
         ),
         NPCProfile(
-            npc_id="npc_chen",
-            name="陈婆",
-            title="编织者",
+            npc_id="npc_shi",
+            name="石",
+            title="猎人",
             backstory=(
-                "陈婆是村子里年纪最大的女性，慈祥但有些迷糊。"
-                "她的手从未停过编织，上面有复杂的图案。"
-                "她和主人公的爷爷是年轻时的挚友，但关于爷爷的记忆模糊了。"
+                "石是岚婆的儿子，村里的猎人，瘦但结实。"
+                "他暗恋禾但从不敢开口。"
+                "从岚婆那里学了通灵把戏，自以为有感知力，其实什么都感知不到。"
             ),
-            personality="慈祥迷糊，记性不太好，手从未停过编织，偶尔说出意味深长的话",
-            goals=["继续编织（停不下来）", "想起那件很重要的事", "照看来往的年轻人"],
-            speech_style="慢悠悠的语气，经常说到一半忘了要说什么，偶尔突然清醒地说出一句惊人的话",
+            personality="在山林中自信，在人际中笨拙腼腆，可靠踏实",
+            goals=["保护村子周围的安全", "鼓起勇气和禾说话", "证明自己的感知能力"],
+            speech_style="话不多，谈到打猎时变得自信，谈到禾时脸红结巴",
             relationships={
-                "npc_dave": "老友", "npc_carol": "友好邻居",
-                "npc_lily": "互相喜爱", "npc_alice": "感激",
+                "npc_lan": "母子·听妈妈的话", "npc_he": "暗恋·说不出口",
+                "npc_sui": "喜欢这个孩子", "npc_kuang": "带他打猎",
+                "npc_tang": "同龄相识", "npc_mu": "找他修工具",
             },
             color="#607D8B",
+        ),
+        # ── 1个特殊角色（白天/夜晚双模式LLM驱动）──
+        NPCProfile(
+            npc_id="npc_shangren",
+            name="商人",
+            title="游走商人",
+            backstory=(
+                "商人白天以友善的游走商人身份出现，带着异域小商品。"
+                "他是唯一能进出村子的'外来者'——为什么？没人想过这个问题。"
+                "真身是恶魔，十几年前与爷爷签订了灵魂契约。"
+            ),
+            personality="白天：友善热情，商人嗅觉敏锐；夜晚（高阶段）：古老、公平、不近人情",
+            goals=["白天：做生意，观察村民", "维持契约的运转", "等待下一个来做交易的人"],
+            speech_style="白天：热情但说不出哪里不对；夜晚：简洁、精确、每句话都像在宣读条款",
+            relationships={
+                "npc_tang": "交易对象·冷淡的关注", "npc_shan": "被山警惕",
+                "npc_he": "正常客户", "npc_mu": "偶尔交易",
+            },
+            color="#FFC107",
         ),
     ]
 
@@ -572,10 +600,11 @@ def create_world(seed: int = 42) -> World:
             t.resource = Resource(ResourceType.FOOD, rng.randint(2, 5), 5)
             food_placed += 1
 
-    # Clear NPC & player spawn points (8个角色的出生点)
+    # Clear NPC & player spawn points (9个角色的出生点)
     npc_spawns = [
-        (5, 5), (14, 5), (5, 14), (14, 14),  # 原4角色
-        (8, 5), (10, 14), (3, 10), (17, 10),  # 新4角色
+        (5, 5), (6, 5), (10, 10), (14, 5),   # 核心：禾、穗、山、棠
+        (8, 14), (14, 14), (3, 10), (17, 10), # 日常：旷、木、岚婆、石
+        (5, 14),                               # 特殊：商人
     ]
     for sx, sy in npc_spawns:
         if 0 <= sx < width and 0 <= sy < height:
@@ -588,22 +617,24 @@ def create_world(seed: int = 42) -> World:
             tiles[py][px].tile_type = TileType.GRASS
         tiles[py][px].resource = None
 
-    # 创建NPC档案和实体（6主要 + 2次要 = 8个角色）
+    # 创建NPC档案和实体（4核心 + 4日常 + 1特殊 = 9个角色）
     profiles = _default_profiles()
     profile_map = {p.npc_id: p for p in profiles}
 
     npcs = []
     for npc_id, name, x, y, color in [
-        # 主要角色
-        ("npc_alice", "Alice", 5,  5,  "#4CAF50"),
-        ("npc_bob",   "Bob",   14, 5,  "#2196F3"),
-        ("npc_carol", "Carol", 5,  14, "#FFC107"),
-        ("npc_dave",  "Dave",  14, 14, "#F44336"),
-        ("npc_erik",  "Erik",  8,  5,  "#795548"),   # 铁匠，在Alice和Bob之间
-        ("npc_lily",  "Lily",  10, 14, "#E91E63"),   # 孩子，在Carol附近
-        # 次要角色
-        ("npc_marco", "Marco", 3,  10, "#9C27B0"),   # 外来者，在村子西侧
-        ("npc_chen",  "陈婆",  17, 10, "#607D8B"),   # 爷爷老朋友，在村子东侧
+        # 核心角色
+        ("npc_he",    "禾",   5,  5,  "#4CAF50"),   # 母亲，村西侧家
+        ("npc_sui",   "穗",   6,  5,  "#E91E63"),   # 女儿，跟着妈妈
+        ("npc_shan",  "山",   10, 10, "#F44336"),   # 老村长，村中心
+        ("npc_tang",  "棠",   14, 5,  "#FF5722"),   # 玩伴，村东侧
+        # 日常角色
+        ("npc_kuang", "旷",   8,  14, "#2196F3"),   # 小男孩，到处跑
+        ("npc_mu",    "木",   14, 14, "#795548"),   # 老工匠，工坊
+        ("npc_lan",   "岚婆", 3,  10, "#9C27B0"),   # 神婆，村口
+        ("npc_shi",   "石",   17, 10, "#607D8B"),   # 猎人，村边
+        # 特殊角色
+        ("npc_shangren", "商人", 5, 14, "#FFC107"), # 商人，白天村中游走
     ]:
         prof = profile_map.get(npc_id)
         npc = NPC(

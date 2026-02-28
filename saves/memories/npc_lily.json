@@ -1,0 +1,82 @@
+[
+  {
+    "record_id": "d4bfdf76",
+    "npc_id": "npc_lily",
+    "content": "行动: move | 想: 我要去旁边的森林里找木头，Carol阿姨说过木头可以做好多东西！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235831.8149574,
+    "tick": 4,
+    "location": [
+      10,
+      14
+    ]
+  },
+  {
+    "record_id": "b708071b",
+    "npc_id": "npc_lily",
+    "content": "行动: gather | 想: 这里有好多木头！我可以拿一点点吗？",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235839.388284,
+    "tick": 6,
+    "location": [
+      10,
+      13
+    ]
+  },
+  {
+    "record_id": "8c90b7f3",
+    "npc_id": "npc_lily",
+    "content": "行动: talk | 说: Dave爷爷，什么是……故事气息呀？是不是像风一样，可以闻到吗？",
+    "tags": [
+      "talk",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235846.3446734,
+    "tick": 9,
+    "location": [
+      10,
+      13
+    ]
+  },
+  {
+    "record_id": "a3413d0b",
+    "npc_id": "npc_lily",
+    "content": "行动: craft",
+    "tags": [
+      "craft",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235850.5577285,
+    "tick": 10,
+    "location": [
+      10,
+      13
+    ]
+  },
+  {
+    "record_id": "4224258b",
+    "npc_id": "npc_lily",
+    "content": "行动: move | 想: 我要去找玩家哥哥/姐姐，看看他们在玩什么！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235859.2055297,
+    "tick": 13,
+    "location": [
+      10,
+      13
+    ]
+  }
+]

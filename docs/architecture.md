@@ -1,4 +1,4 @@
-# 🏗️ 架构设计
+# 架构设计
 
 [← 返回主页](../README.md)
 
@@ -8,7 +8,7 @@
 
 - [整体技术栈](#整体技术栈)
 - [异步并发模型](#异步并发模型)
-- [LLM 双后端调度](#llm-双后端调度)
+- [LLM 三后端调度](#llm-三后端调度)
 - [事件系统](#事件系统)
 - [游戏循环详解](#游戏循环详解)
 - [市场系统设计](#市场系统设计)
@@ -23,8 +23,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     浏览器 (前端)                         │
-│  HTML5 Canvas  +  原生 JavaScript  +  WebSocket Client   │
+│                     Godot 4 (前端)                       │
+│  2D 游戏场景  +  GDScript  +  WebSocket Client          │
 │  封面屏幕 / 新游戏流程 / 主游戏界面 / 经济面板              │
 └────────────────────────┬────────────────────────────────┘
                          │ WebSocket /ws
@@ -40,58 +40,82 @@
 │  ┌──────▼───────────────────────────────────────────┐   │
 │  │                   GameLoop                        │   │
 │  │  ┌────────────┐  ┌─────────────┐  ┌───────────┐  │   │
-│  │  │ WorldTick  │  │ NPCBrain ×4 │  │ GodBrain  │  │   │
+│  │  │ WorldTick  │  │ NPCBrain ×9 │  │ GodBrain  │  │   │
 │  │  │  + Market  │  │   Loops     │  │   Loop    │  │   │
 │  │  └────────────┘  └─────────────┘  └───────────┘  │   │
 │  └───────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────┘
                          │
-          ┌──────────────┴──────────────┐
-          │                             │
-    ┌─────▼──────┐              ┌───────▼──────┐
-    │ Google     │              │ 本地 LLM      │
-    │ Gemini API │              │ (Ollama/      │
-    │ (云端)     │              │  LM Studio…) │
-    └────────────┘              └──────────────┘
+          ┌──────────────┼──────────────┐
+          │              │              │
+    ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼─────────┐
+    │ Google     │ │ Anthropic  │ │ 本地 LLM      │
+    │ Gemini API │ │ Claude API │ │ (Ollama/      │
+    │ (云端)     │ │ (云端)     │ │  LM Studio…) │
+    └────────────┘ └────────────┘ └──────────────┘
 ```
 
 ---
 
 ## 异步并发模型
 
-服务器启动后，`GameLoop.start()` 同时创建 **6 个独立的 asyncio Task**：
+服务器启动后，`GameLoop.start_simulation()` 同时创建 **11 个独立的 asyncio Task**：
 
 ```
-GameLoop.start()
-├── Task: _world_tick_loop()      # 世界时间推进 + 被动效果 + 市场更新
-├── Task: _npc_brain_loop(Alice)  # Alice 的大脑（独立循环）
-├── Task: _npc_brain_loop(Bob)    # Bob 的大脑
-├── Task: _npc_brain_loop(Carol)  # Carol 的大脑
-├── Task: _npc_brain_loop(Dave)   # Dave 的大脑
-└── Task: _god_brain_loop()       # 上帝的大脑
+GameLoop.start_simulation()
+├── Task: _world_tick_loop()         # 世界时间推进 + 被动效果 + 市场更新
+├── Task: _npc_brain_loop(禾)        # 核心NPC（高频）
+├── Task: _npc_brain_loop(穗)        # 核心NPC
+├── Task: _npc_brain_loop(山)        # 核心NPC
+├── Task: _npc_brain_loop(棠)        # 核心NPC
+├── Task: _npc_brain_loop(旷)        # 日常NPC（低频，think_interval_multiplier）
+├── Task: _npc_brain_loop(木)        # 日常NPC
+├── Task: _npc_brain_loop(岚婆)      # 日常NPC
+├── Task: _npc_brain_loop(石)        # 日常NPC
+├── Task: _npc_brain_loop(商人)      # 特殊NPC（日夜提示词不同）
+└── Task: _god_brain_loop()          # 爷爷 / God Agent
 ```
 
 ### 为什么是独立 Task 而非共享循环？
 
-- **真正的并发决策**：4 个 NPC 同时在"思考"，不互相阻塞
-- **差异化节奏**：每个 NPC 的 LLM 响应时间不同，各自维护自己的等待周期
+- **真正的并发决策**：9 个 NPC 同时在"思考"，不互相阻塞
+- **差异化节奏**：核心 NPC 5-10s、日常 NPC 15-30s、特殊 NPC 15s
 - **故障隔离**：单个 NPC 的 LLM 调用失败不影响其他角色
 
 ### NPC Brain Loop 时序
 
 ```
-[Alice Brain Loop]
+[禾 Brain Loop]（核心NPC）
   ─── sleep(random 1-4s) ──▶ LLM call ──▶ apply action ──▶ broadcast
                                                               │
                              ◀── sleep(5-10s 或 talk 后 3-6s) ┘
+                             ──▶ LLM call ──▶ ...
+
+[旷 Brain Loop]（日常NPC，think_interval_multiplier=2.0）
+  ─── sleep(random 1-4s) ──▶ LLM call ──▶ apply action ──▶ broadcast
+                                                              │
+                             ◀── sleep(10-20s，乘以 multiplier) ┘
                              ──▶ LLM call ──▶ ...
 ```
 
 NPC 说话（`talk`）后等待时间延长到 3–6s，给对话留出节奏感。
 
+### 三层 NPC 决策系统
+
+```
+Layer 1 — 策略层（每 NPC_STRATEGY_INTERVAL=20 ticks）
+  轻量 LLM 调用 → 设定 npc.goal 和 npc.plan
+
+Layer 2 — 战术层（规则引擎，每个 brain cycle）
+  _advance_plan_if_needed() → 弹出已完成步骤
+
+Layer 3 — 执行层（每个 brain cycle）
+  主 LLM 调用（注入 goal/plan）→ NPCAction → 世界执行
+```
+
 ---
 
-## LLM 双后端调度
+## LLM 三后端调度
 
 `BaseAgent.call_llm()` 根据 `config.LLM_PROVIDER` 在运行时动态分发：
 
@@ -99,6 +123,8 @@ NPC 说话（`talk`）后等待时间延长到 3–6s，给对话留出节奏感
 async def call_llm(system_prompt, context_message, history, response_schema):
     if config.LLM_PROVIDER == "local":
         return await _call_local(...)    # OpenAI 兼容接口
+    elif config.LLM_PROVIDER == "claude":
+        return await _call_claude(...)   # Anthropic Claude SDK
     else:
         return await _call_gemini(...)   # Google Gemini SDK
 ```
@@ -123,6 +149,25 @@ client.aio.models.generate_content(model, contents, config)
     ▼
 JSON 解析 → Pydantic 模型实例
 记录 token（usage_metadata.prompt_token_count / candidates_token_count）
+```
+
+### Claude 后端（`_call_claude`）
+
+```
+构建 messages 列表（role: user/assistant）
+    │
+    ▼
+anthropic.AsyncAnthropic().messages.create(
+    model           = config.ANTHROPIC_MODEL,
+    system          = system_prompt,
+    messages        = messages,
+    max_tokens      = config.LLM_MAX_TOKENS,
+    temperature     = config.LLM_TEMPERATURE,
+)
+    │
+    ▼
+JSON 解析 → Pydantic 模型实例
+记录 token（usage.input_tokens / output_tokens）
 ```
 
 ### 本地后端（`_call_local`）
@@ -153,11 +198,15 @@ JSON 解析 → Pydantic 模型实例
 ```python
 # 首次调用时创建，切换配置后自动重建
 _gemini_client = None   # 调用 _get_gemini_client() 时懒加载
+_claude_client = None   # 调用 _get_claude_client() 时懒加载
 _local_client  = None   # 调用 _get_local_client()  时懒加载
 
 def update_api_key(new_key):
     self._api_key = new_key
     self._gemini_client = None   # 下次调用时重建
+
+def reset_claude_client():
+    self._claude_client = None   # API key 变更后重建
 
 def reset_local_client():
     self._local_client = None    # URL/模型变更后重建
@@ -175,10 +224,10 @@ def reset_local_client():
     ▼
 生成 WorldEvent(
     event_type = EventType.npc_spoke,
-    actor      = "Alice",
-    summary    = 'Alice 说: "你好！"',
-    origin_x   = 5,
-    origin_y   = 5,
+    actor      = "禾",
+    summary    = '禾 说: "你饿了吧？来吃点东西。"',
+    origin_x   = 3,
+    origin_y   = 3,
     radius     = 5,       # 影响范围（曼哈顿距离）
     metadata   = {...},
 )
@@ -216,9 +265,9 @@ EventBus.dispatch(event, world)
 | `trade_countered` | `counter_trade` | 5 格 |
 | `market_updated` | 市场更新循环 | 全局 |
 | `npc_thought` | `think` | 0 格（仅自己） |
-| `weather_changed` | 上帝动作 | 全局 |
-| `resource_spawned` | 上帝动作 | 全局 |
-| `god_commentary` | 上帝决策 | 全局 |
+| `weather_changed` | God 动作 | 全局 |
+| `resource_spawned` | God 动作 | 全局 |
+| `god_commentary` | God 决策 | 全局 |
 
 ---
 
@@ -271,9 +320,13 @@ while simulation_running:
 
         broadcast_with_events(events)
 
-    base_wait = random(5, 10)
+    base_wait = random(NPC_MIN_THINK, NPC_MAX_THINK)
     if npc.last_action == "talk":
         base_wait = random(3, 6)     # 对话后给其他 NPC 回复的时间
+    # 日常NPC（旷/木/岚/石）乘以 think_interval_multiplier
+    daily_cfg = DAILY_NPC_CONFIG.get(npc.npc_id)
+    if daily_cfg:
+        base_wait *= daily_cfg["think_interval_multiplier"]
     await sleep(base_wait)
 ```
 
@@ -292,7 +345,7 @@ while simulation_running:
         release _world_lock
         broadcast_with_events(events)
 
-    await sleep(random 20-40s)       # 上帝行动频率较低
+    await sleep(random 20-40s)       # God 行动频率较低
 ```
 
 ---
@@ -346,24 +399,24 @@ NPC 在 system prompt 中会收到当前市场价格表（趋势↑↓），并�
 提案式交易允许 NPC 进行异步协商，比 `trade`（同步双向同意）更真实。
 
 ```
-[Alice] propose_trade → Bob (ore ×2, request stone ×5)
+[禾] propose_trade → 石 (food ×2, request stone ×3)
          │
-         ▼ 存入 bob.pending_proposals
+         ▼ 存入 石.pending_proposals
          │
-[系统提示] 下次 Bob 决策时，提案模块被注入 system prompt：
+[系统提示] 下次石决策时，提案模块被注入 system prompt：
          "你有待处理的提案，本轮必须回应"
          │
-         ├── Bob: accept_trade (proposal_from="npc_alice")
+         ├── 石: accept_trade (proposal_from="npc_he")
          │      → 双方库存原子交换 → trade_accepted 事件
          │
-         ├── Bob: reject_trade (proposal_from="npc_alice")
-         │      → 清除提案 → trade_rejected 事件 → Alice inbox 收到通知
+         ├── 石: reject_trade (proposal_from="npc_he")
+         │      → 清除提案 → trade_rejected 事件 → 禾 inbox 收到通知
          │
-         └── Bob: counter_trade (proposal_from="npc_alice",
-                  offer_item="stone", offer_qty=3,
-                  request_item="ore", request_qty=2)
-                → 向 Alice 发新提案 → trade_countered 事件
-                → Alice 下一轮回应（最多往返数轮）
+         └── 石: counter_trade (proposal_from="npc_he",
+                  offer_item="stone", offer_qty=2,
+                  request_item="food", request_qty=2)
+                → 向禾发新提案 → trade_countered 事件
+                → 禾下一轮回应（最多往返数轮）
 ```
 
 过期处理：提案超过 10 ticks 未响应，由 `apply_passive()` 自动清除（防止无限积压）。
@@ -373,7 +426,7 @@ NPC 在 system prompt 中会收到当前市场价格表（趋势↑↓），并�
 ## WebSocket 数据流
 
 ```
-[浏览器] ──connect──▶ [FastAPI /ws]
+[客户端] ──connect──▶ [FastAPI /ws]
                             │
                             ▼
                     发送初始世界快照（world_snapshot）
@@ -388,13 +441,13 @@ NPC 在 system prompt 中会收到当前市场价格表（趋势↑↓），并�
 
 [Market Update] ──每5tick──▶ broadcast(snapshot + market_updated event)
 
-[浏览器] ──god_command──▶ [FastAPI /ws]
+[客户端] ──god_command──▶ [FastAPI /ws]
                                │
                                ▼
                     god.pending_commands.append(cmd)
                     (在下一个 world tick 处理)
 
-[浏览器] ──player_action──▶ [FastAPI /ws]
+[客户端] ──player_action──▶ [FastAPI /ws]
                                 │
                                 ▼
                     game_loop.handle_player_action(msg)
@@ -405,6 +458,8 @@ NPC 在 system prompt 中会收到当前市场价格表（趋势↑↓），并�
 
 ## 前端界面架构
 
+> 注：前端正在从 HTML5 Canvas 迁移到 Godot 4，以下架构描述将在迁移完成后更新。
+
 ### 应用状态机
 
 ```
@@ -414,52 +469,18 @@ AppState: cover → (新游戏) → new_game_modal → playing
           playing → (设置)  → 返回封面
 ```
 
-### 封面屏幕
-
-- 全屏深色背景 + HTML5 Canvas 粒子网络动画（连线效果）
-- 游戏 LOGO + 副标题
-- 三按钮：新游戏 / 读取存档 / 快速开始
-
-### 新游戏流程（Modal）
-
-两个 Tab：
-
-**Tab A - 地图设置**：
-- 随机种子输入框
-- 20×20 网格地图编辑器（点击/拖动涂色）
-- 地块调色板：草地 / 岩石 / 森林 / 城镇
-
-**Tab B - NPC 档案**：
-- 4 个 NPC 卡片，可编辑 title / backstory / goals / speech_style
-- 导入/导出 JSON 按钮
-
-### 主游戏界面
+### 主游戏界面（目标架构）
 
 ```
-┌──── Header: Day/时间/天气/Token进度条/模拟按钮 ──────────┐
-├──── Canvas (20×20地图) ────────┬──── 4-Tab 面板 ─────────┤
-│   NPC 圆形头像 + 能量弧         │  👥 NPC 卡片           │
-│   说话气泡（3s淡出）            │  📊 经济面板           │
-│   思考时旋转虚线环              │  🎮 控制面板           │
-│   天气粒子（雨滴/闪电）         │  ⚙️ 设置面板           │
-├──── 玩家控制条 (WASD) ─────────┴────────────────────────┤
+┌──── Header: Day/时间/天气/季节/Token进度条/模拟按钮 ─────┐
+├──── 游戏视口 (20×20地图) ──────┬──── 侧面板 ──────────────┤
+│   NPC 头像 + 能量弧             │  NPC 卡片（9个）         │
+│   说话气泡（3s淡出）            │  经济面板               │
+│   思考时旋转虚线环              │  控制面板               │
+│   天气粒子（雨滴/闪电）         │  设置面板               │
+├──── 玩家控制条 ─────────────────┴────────────────────────┤
 └──── 事件日志（滚动）───────────────────────────────────────┘
 ```
-
-### 经济面板（📊 Economy Tab）
-
-- **价格表**：物品 | 当前价 | 基准 | 趋势 ↑↓ | 变化%
-- **价格历史折线图**：HTML5 Canvas 绘制，物品选择器，最近 30 个价格点，渐变填充
-- **最近交易记录**：来自 `npc_sold` / `npc_bought` / `trade_accepted` 事件
-
-### NPC 卡片（👥 NPC Tab）
-
-每个 NPC 卡片包含：
-- 彩色圆形头像 + 名字 + 称号
-- 能量条（低于30显示红色）
-- 库存概览（仅显示数量>0的物品）
-- 展开：背景故事 / 当前目标 / 上次发言
-- 编辑按钮 → 弹窗热编辑档案
 
 ---
 

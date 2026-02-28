@@ -1,0 +1,66 @@
+[
+  {
+    "record_id": "1e56574d",
+    "npc_id": "npc_erik",
+    "content": "行动: move | 想: 先去森林采集木头，顺便和Alice打个招呼。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235833.5881684,
+    "tick": 4,
+    "location": [
+      8,
+      5
+    ]
+  },
+  {
+    "record_id": "9b898dce",
+    "npc_id": "npc_erik",
+    "content": "行动: move | 想: 去有木头的地方。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235842.1193876,
+    "tick": 7,
+    "location": [
+      8,
+      6
+    ]
+  },
+  {
+    "record_id": "4ff279f6",
+    "npc_id": "npc_erik",
+    "content": "行动: gather | 想: 先采集木头。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235853.2859862,
+    "tick": 11,
+    "location": [
+      9,
+      6
+    ]
+  },
+  {
+    "record_id": "8a4fe8c6",
+    "npc_id": "npc_erik",
+    "content": "行动: move | 想: 已经采集了一些木头，现在该往西找石头了。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235862.913587,
+    "tick": 14,
+    "location": [
+      9,
+      6
+    ]
+  }
+]

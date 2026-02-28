@@ -21,15 +21,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AgentHome")
 game_loop = GameLoop()
 
-# ── Static files ──────────────────────────────────────────────────────────────
+# ── Static files (optional — HTML frontend removed, Godot client is primary) ──
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+if FRONTEND_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 @app.get("/")
 async def index():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    if FRONTEND_DIR.is_dir() and (FRONTEND_DIR / "index.html").exists():
+        return FileResponse(str(FRONTEND_DIR / "index.html"))
+    return JSONResponse({"status": "ok", "client": "Use Godot client to connect via WebSocket"})
 
 
 # ── Settings API ──────────────────────────────────────────────────────────────
@@ -87,10 +90,10 @@ async def post_settings(request: Request):
         except (ValueError, TypeError):
             pass
 
-    # LLM provider switch (gemini / local)
+    # LLM provider switch (claude / gemini / local)
     if "llm_provider" in data:
         provider = str(data["llm_provider"]).strip()
-        if provider in ("gemini", "local"):
+        if provider in ("claude", "gemini", "local"):
             local_url = str(data.get("local_llm_base_url", "") or "").strip() or None
             local_model = str(data.get("local_llm_model", "") or "").strip() or None
             game_loop.update_provider(provider, local_url, local_model)

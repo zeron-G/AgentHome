@@ -184,12 +184,14 @@ class WorldManager:
                 rest_energy = config.FURNITURE_EFFECTS.get("chair", {}).get("rest_energy", 35)
             npc.energy = min(100, npc.energy + rest_energy)
             npc.last_action = "rest"
+            npc.last_action_result = f"休息了一会儿，恢复了{rest_energy}体力"
 
         elif action_type == "think":
             note = action.get("note", "").strip()
             if note:
                 npc.memory.add_note(note)
             npc.last_action = "think"
+            npc.last_action_result = "记录了一些想法"
 
         elif action_type == "eat":
             events.extend(self._do_eat(npc, world, tick))
@@ -232,6 +234,7 @@ class WorldManager:
 
         else:
             npc.last_action = "idle"
+            npc.last_action_result = "发呆了一会儿"
 
         return events
 
@@ -265,6 +268,8 @@ class WorldManager:
             energy_cost = max(0, energy_cost - rope_save)
         npc.energy = max(0, npc.energy - energy_cost)
         npc.last_action = "move"
+        tile_desc = new_tile.tile_type.value if new_tile else "未知"
+        npc.last_action_result = f"移动到了({npc.x},{npc.y})，这里是{tile_desc}"
 
         return [WorldEvent(
             event_type=EventType.NPC_MOVED,
@@ -278,6 +283,7 @@ class WorldManager:
     def _do_gather(self, npc: NPC, world: World, tick: int) -> list[WorldEvent]:
         tile = world.get_tile(npc.x, npc.y)
         if not tile or not tile.resource or tile.resource.quantity <= 0:
+            npc.last_action_result = "这里没有可采集的资源"
             return []
 
         rtype = tile.resource.resource_type
@@ -306,6 +312,7 @@ class WorldManager:
 
         npc.energy = max(0, npc.energy - 5)
         npc.last_action = "gather"
+        npc.last_action_result = f"采集了{amount}个{rtype.value}"
 
         events = [WorldEvent(
             event_type=EventType.NPC_GATHERED,
@@ -340,6 +347,14 @@ class WorldManager:
         npc.last_message = full_msg
         npc.last_message_tick = tick
         npc.last_action = "talk"
+        target_name = target_id or "周围的人"
+        if world.player and target_id == "player":
+            target_name = world.player.name
+        else:
+            t_npc = world.get_npc(target_id) if target_id else None
+            if t_npc:
+                target_name = t_npc.name
+        npc.last_action_result = f"对{target_name}说了话"
 
         # If talking to player, push to dialogue_queue for reply UI
         if world.player and target_id == "player":
@@ -394,7 +409,9 @@ class WorldManager:
         target_npc.inventory.set(offer_item, target_npc.inventory.get(offer_item) + offer_qty)
 
         npc.last_action = "trade"
+        npc.last_action_result = f"与{target_npc.name}交易了{offer_qty}{offer_item}换{request_qty}{request_item}"
         target_npc.last_action = "trade"
+        target_npc.last_action_result = f"与{npc.name}交易了{request_qty}{request_item}换{offer_qty}{offer_item}"
 
         return [WorldEvent(
             event_type=EventType.NPC_TRADED,
@@ -414,11 +431,13 @@ class WorldManager:
 
     def _do_eat(self, npc: NPC, world: World, tick: int) -> list[WorldEvent]:
         if npc.inventory.food <= 0:
+            npc.last_action_result = "没有食物可以吃"
             return []
         npc.inventory.food -= 1
         restore = config.FOOD_ENERGY_RESTORE
         npc.energy = min(100, npc.energy + restore)
         npc.last_action = "eat"
+        npc.last_action_result = f"吃了食物，恢复了{restore}体力"
         return [WorldEvent(
             event_type=EventType.NPC_ATE,
             tick=tick,
@@ -437,6 +456,8 @@ class WorldManager:
             restore = config.SLEEP_ENERGY_RESTORE
         npc.energy = min(100, npc.energy + restore)
         npc.last_action = "sleep"
+        bed_str = "在床上" if (tile and tile.furniture == "bed") else ""
+        npc.last_action_result = f"{bed_str}睡了一觉，恢复了{restore}体力"
         return [WorldEvent(
             event_type=EventType.NPC_SLEPT,
             tick=tick,
@@ -476,6 +497,7 @@ class WorldManager:
         npc.inventory.set(item, npc_has - qty)
         npc.inventory.gold += gold_earned
         npc.last_action = "exchange"
+        npc.last_action_result = f"用{qty}个{item}换了{gold_earned}金币"
 
         return [WorldEvent(
             event_type=EventType.NPC_EXCHANGED,
@@ -515,6 +537,7 @@ class WorldManager:
         npc.inventory.gold -= cost
         npc.inventory.food += qty
         npc.last_action = "buy_food"
+        npc.last_action_result = f"花{cost}金币买了{qty}个食物"
 
         return [WorldEvent(
             event_type=EventType.NPC_BOUGHT_FOOD,
@@ -563,6 +586,7 @@ class WorldManager:
         # Produce item
         npc.inventory.set(item, npc.inventory.get(item) + qty)
         npc.last_action = "craft"
+        npc.last_action_result = f"制造了{qty}个{item}"
         actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
         evt = EventType.PLAYER_CRAFTED if actor_id == "player" else EventType.NPC_CRAFTED
 
@@ -605,6 +629,7 @@ class WorldManager:
         npc.inventory.set(item, npc_has - qty)
         npc.inventory.gold = round(npc.inventory.gold + gold_earned, 1)
         npc.last_action = "sell"
+        npc.last_action_result = f"以{price:.1f}金/个卖出了{qty}个{item}，获得{gold_earned:.0f}金"
         actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
         evt = EventType.PLAYER_SOLD if actor_id == "player" else EventType.NPC_SOLD
 
@@ -654,6 +679,7 @@ class WorldManager:
         npc.inventory.gold = round(npc.inventory.gold - total_cost, 1)
         npc.inventory.set(item, npc.inventory.get(item) + qty)
         npc.last_action = "buy"
+        npc.last_action_result = f"以{mp.current:.1f}金/个买了{qty}个{item}，花了{total_cost:.0f}金"
         actor_id = getattr(npc, "npc_id", getattr(npc, "player_id", "unknown"))
         evt = EventType.PLAYER_BOUGHT if actor_id == "player" else EventType.NPC_BOUGHT
 
@@ -696,6 +722,7 @@ class WorldManager:
         """Use a consumable or equip a tool/rope."""
         item = action.get("use_item", "").strip()
         if not item or npc.inventory.get(item) <= 0:
+            npc.last_action_result = f"没有{item}可以使用" if item else "没有指定物品"
             return []
 
         effects = config.ITEM_EFFECTS.get(item, {})
@@ -705,6 +732,7 @@ class WorldManager:
             npc.energy = min(100, npc.energy + restore)
             npc.inventory.set(item, npc.inventory.get(item) - 1)
             npc.last_action = "use_item"
+            npc.last_action_result = f"使用了{item}，恢复了{restore}体力"
             return [WorldEvent(
                 event_type=EventType.NPC_USED_ITEM,
                 tick=tick,
@@ -719,6 +747,7 @@ class WorldManager:
             events = self._do_equip_item(npc, item, world, tick)
             if events:
                 npc.last_action = "use_item"
+                npc.last_action_result = f"装备了{item}"
             return events
 
         return []
@@ -756,6 +785,7 @@ class WorldManager:
         }
         target_npc.pending_proposals.append(proposal)
         npc.last_action = "propose_trade"
+        npc.last_action_result = f"向{target_npc.name}提出交易：{offer_qty}{offer_item}换{request_qty}{request_item}"
 
         return [WorldEvent(
             event_type=EventType.TRADE_PROPOSED,
@@ -813,7 +843,9 @@ class WorldManager:
 
         npc.pending_proposals.remove(proposal)
         npc.last_action = "accept_trade"
+        npc.last_action_result = f"接受了{from_npc.name}的交易，给出{give_qty}{give_item}获得{recv_qty}{recv_item}"
         from_npc.last_action = "trade"
+        from_npc.last_action_result = f"{npc.name}接受了交易，获得{give_qty}{give_item}给出{recv_qty}{recv_item}"
 
         return [WorldEvent(
             event_type=EventType.TRADE_ACCEPTED,
@@ -836,6 +868,8 @@ class WorldManager:
         from_npc = world.get_npc(from_id)
         npc.pending_proposals.remove(proposal)
         npc.last_action = "reject_trade"
+        from_name = from_npc.name if from_npc else from_id
+        npc.last_action_result = f"拒绝了{from_name}的交易提案"
 
         # Notify proposer via inbox
         if from_npc:
@@ -878,6 +912,8 @@ class WorldManager:
             return []
 
         npc.last_action = "counter_trade"
+        from_name = from_npc.name if from_npc else from_id
+        npc.last_action_result = f"向{from_name}反提议：{offer_qty}{offer_item}换{request_qty}{request_item}"
 
         # Send counter proposal to original proposer
         if from_npc:
@@ -928,8 +964,8 @@ class WorldManager:
         tile.furniture = furniture
 
         actor_id = getattr(character, "npc_id", getattr(character, "player_id", "unknown"))
-        last_action_attr = "last_action"
-        setattr(character, last_action_attr, "build")
+        character.last_action = "build"
+        character.last_action_result = f"在({character.x},{character.y})建造了{furniture}"
 
         return [WorldEvent(
             event_type=EventType.FURNITURE_BUILT,

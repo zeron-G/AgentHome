@@ -190,5 +190,53 @@
       11,
       15
     ]
+  },
+  {
+    "record_id": "b26d0c31",
+    "npc_id": "npc_dave",
+    "content": "行动: talk | 说: Lily，早安。看这晨曦，它带来的不仅是光明，还有那些尘封已久的故事气息。你可曾感受到？",
+    "tags": [
+      "talk",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235839.6175923,
+    "tick": 6,
+    "location": [
+      14,
+      14
+    ]
+  },
+  {
+    "record_id": "2325693f",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 晨光渐浓，是时候去感受大地的古老心跳了。石头里藏着时间的秘密。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235847.8065643,
+    "tick": 9,
+    "location": [
+      14,
+      14
+    ]
+  },
+  {
+    "record_id": "4b62211c",
+    "npc_id": "npc_dave",
+    "content": "行动: move | 想: 寻找那些沉默的见证者，它们深藏着村子的记忆。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235861.590152,
+    "tick": 14,
+    "location": [
+      14,
+      13
+    ]
   }
 ]

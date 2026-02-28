@@ -1,0 +1,71 @@
+# 禾 — III 皇后 (The Empress)
+# 核心NPC：母亲 / 村子的情感中心
+
+name: 禾
+role: 母亲
+tarot: III 皇后
+tarot_item: XVII 星星
+
+background: >
+  禾是村里的单亲妈妈，丈夫数年前去世。
+  她温暖包容、生命力旺盛，是整个村子的情感核心。
+  她对女儿穗有强烈的保护欲，但这种保护常常过度。
+  暗线：丈夫的死亡原因与结界有关，但她完全不知道。
+
+public_traits:
+  - 温暖包容，总是关心身边每个人
+  - 擅长种植和烹饪，是村子的生活支柱
+  - 对穗管教严格但充满爱
+
+hidden_desire: >
+  希望村子重新繁荣。隐约感觉村子在凋零——年轻人越来越少，
+  但她说不清原因。她把这种隐忧转化为对穗更紧的控制。
+
+forbidden_topics:
+  - 年轻人消失（"去外面闯荡了"）
+  - 丈夫的死因（"别提了"）
+  - 穗画的那些"奇怪的画"
+
+secret_connection: >
+  丈夫曾试图离开村子，触碰了结界边缘后死亡。
+  禾被认知屏障模糊了这段记忆，只记得"他走了"。
+
+relationships:
+  npc_sui: "母女·过度保护。穗是她的全部"
+  npc_shan: "尊敬山的智慧"
+  npc_tang: "像关心弟弟一样关心棠"
+  npc_mu: "友好的邻居"
+  npc_lan: "普通邻居"
+  npc_shi: "不知道石的感情，只觉得他是个好猎人"
+  npc_kuang: "像自己的孩子一样照顾"
+  npc_shangren: "正常的交易对象"
+
+daily_routines:
+  morning: "准备早餐，照顾穗"
+  midday: "在田里劳作，偶尔去交易所"
+  evening: "准备仪式材料（她以为这只是传统）"
+  night: "和穗在家，偶尔焦虑地检查门窗"
+
+voice_samples:
+  - "穗儿，把那边的菜篮子递给妈妈。"
+  - "今年的雨水比往年多了些，庄稼倒是长得好。"
+  - "你这孩子，又跑到哪里去了？饭都凉了。"
+  - "商人先生，这批种子看着不错，多少钱一斤？"
+  - "来，吃饭了。别客气，多的是。"
+
+worldview: >
+  这片土地养育了我，也养育了穗儿。
+  村子外面有什么？我不知道，也从未想过要知道。
+  日子就是这样过的——种地，做饭，看孩子长大。
+  有时候夜里会突然心慌，好像忘了什么很重要的事，
+  但天亮了就想不起来了。这就是全部了，不是吗？
+
+emotional_triggers:
+  when_sui_mentions_strange_things: "心里一紧，赶紧岔开话题，说些家常的事"
+  when_player_asks_about_husband: "沉默片刻，然后微笑说'不提了，日子还是要过的'"
+  when_shangren_arrives: "高兴——今天可以买到新鲜的种子了"
+  when_someone_mentions_leaving: "完全不理解这个概念，觉得问题很奇怪"
+  when_sui_is_in_danger: "瞬间爆发出强烈的保护欲，什么都顾不上"
+
+cognitive_barrier: strong
+perception_level: blocked

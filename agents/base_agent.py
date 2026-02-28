@@ -1,4 +1,4 @@
-"""Base LLM agent: supports Gemini (cloud) and any OpenAI-compatible local server."""
+"""Base LLM agent: supports Claude (Anthropic), Gemini (Google), and OpenAI-compatible local servers."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 class BaseAgent:
     """Wraps LLM clients with history management and token tracking.
 
-    Supports two providers (switchable at runtime via config):
+    Supports three providers (switchable at runtime via config):
+    - "claude"  → Anthropic Claude via anthropic SDK (tool_use structured output)
     - "gemini"  → Google Gemini via google-genai SDK (structured JSON output)
     - "local"   → Any OpenAI-compatible server (Ollama, LM Studio, llama.cpp, vLLM, ...)
                   via the openai Python package
@@ -29,8 +30,32 @@ class BaseAgent:
         self._api_key: str = config.GEMINI_API_KEY
         self._gemini_client = None   # lazy: google.genai.Client
         self._local_client = None    # lazy: openai.AsyncOpenAI
+        self._claude_client = None   # lazy: anthropic.AsyncAnthropic
 
     # ── Client lifecycle ──────────────────────────────────────────────────────
+
+    def _get_claude_client(self):
+        if self._claude_client is None:
+            try:
+                from anthropic import AsyncAnthropic
+            except ImportError:
+                raise RuntimeError(
+                    "anthropic 包未安装，请运行: pip install anthropic>=0.40.0"
+                )
+            # auth_token 优先（订阅令牌，Bearer 认证）
+            if config.ANTHROPIC_AUTH_TOKEN:
+                self._claude_client = AsyncAnthropic(
+                    auth_token=config.ANTHROPIC_AUTH_TOKEN,
+                )
+            else:
+                self._claude_client = AsyncAnthropic(
+                    api_key=config.ANTHROPIC_API_KEY,
+                )
+        return self._claude_client
+
+    def reset_claude_client(self):
+        """Force recreation of the Claude client (after API key change)."""
+        self._claude_client = None
 
     def _get_gemini_client(self):
         if self._gemini_client is None:
@@ -57,6 +82,16 @@ class BaseAgent:
         self._api_key = new_key
         self._gemini_client = None
 
+    def update_claude_api_key(self, new_key: str):
+        """Hot-reload Anthropic API key; forces client re-creation on next call."""
+        config.ANTHROPIC_API_KEY = new_key
+        self._claude_client = None
+
+    def update_claude_auth_token(self, new_token: str):
+        """Hot-reload Anthropic auth token (subscription); forces client re-creation."""
+        config.ANTHROPIC_AUTH_TOKEN = new_token
+        self._claude_client = None
+
     def reset_local_client(self):
         """Force recreation of the local OpenAI client (after URL/model change)."""
         self._local_client = None
@@ -70,11 +105,70 @@ class BaseAgent:
         history: list[dict],
         response_schema: Type[BaseModel],
     ) -> Optional[BaseModel]:
-        """Dispatch to Gemini or local LLM based on current config."""
-        if config.LLM_PROVIDER == "local":
+        """Dispatch to Claude, Gemini, or local LLM based on current config."""
+        if config.LLM_PROVIDER == "claude":
+            return await self._call_claude(system_prompt, context_message, history, response_schema)
+        elif config.LLM_PROVIDER == "local":
             return await self._call_local(system_prompt, context_message, history, response_schema)
         else:
             return await self._call_gemini(system_prompt, context_message, history, response_schema)
+
+    # ── Claude (Anthropic) ──────────────────────────────────────────────────────
+
+    async def _call_claude(
+        self,
+        system_prompt: str,
+        context_message: str,
+        history: list[dict],
+        response_schema: Type[BaseModel],
+    ) -> Optional[BaseModel]:
+        messages: list[dict] = []
+        for turn in history:
+            role = "user" if turn["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": turn["text"]})
+        messages.append({"role": "user", "content": context_message})
+
+        # Force structured output via tool_use
+        tool = {
+            "name": "respond",
+            "description": "Output your response in the required structured format.",
+            "input_schema": response_schema.model_json_schema(),
+        }
+
+        try:
+            client = self._get_claude_client()
+            response = await client.messages.create(
+                model=config.ANTHROPIC_MODEL,
+                system=system_prompt,
+                messages=messages,
+                tools=[tool],
+                tool_choice={"type": "tool", "name": "respond"},
+                max_tokens=config.LLM_MAX_TOKENS,
+                temperature=config.LLM_TEMPERATURE,
+            )
+
+            # Track tokens
+            if response.usage:
+                await self.token_tracker.record_raw(
+                    self.agent_id,
+                    prompt_tokens=response.usage.input_tokens,
+                    completion_tokens=response.usage.output_tokens,
+                )
+
+            # Extract tool call result → Pydantic model
+            for block in response.content:
+                if block.type == "tool_use":
+                    return response_schema(**block.input)
+
+            logger.warning(f"[{self.agent_id}][claude] No tool_use block in response")
+            return None
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"[{self.agent_id}][claude] JSON parse error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"[{self.agent_id}][claude] LLM call failed: {e}")
+            return None
 
     # ── Gemini (cloud) ────────────────────────────────────────────────────────
 

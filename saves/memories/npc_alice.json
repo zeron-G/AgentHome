@@ -158,5 +158,69 @@
       4,
       6
     ]
+  },
+  {
+    "record_id": "3dae26c7",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 哇，我看到Erik也在那边呢！我要过去采集木头，顺便和他打个招呼！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235833.8402987,
+    "tick": 4,
+    "location": [
+      5,
+      5
+    ]
+  },
+  {
+    "record_id": "12b20350",
+    "npc_id": "npc_alice",
+    "content": "行动: gather | 想: 太好了，我找到木头了！先采集一点，这样就能开始制作我的工具啦！",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235840.9559581,
+    "tick": 7,
+    "location": [
+      6,
+      5
+    ]
+  },
+  {
+    "record_id": "33061cf6",
+    "npc_id": "npc_alice",
+    "content": "行动: move | 想: 好啦，木头已经采集好了！现在我要去找石头，我看到西北方向有岩石区，我得赶紧过去采集，这样就能制作我的工具了！",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235849.1752684,
+    "tick": 9,
+    "location": [
+      6,
+      5
+    ]
+  },
+  {
+    "record_id": "4a66df85",
+    "npc_id": "npc_alice",
+    "content": "行动: talk | 说: 哇，外面的世界听起来好棒啊！Marco，能和我说说你都看到了些什么吗？我超好奇的！",
+    "tags": [
+      "talk",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235862.1490715,
+    "tick": 14,
+    "location": [
+      5,
+      6
+    ]
   }
 ]

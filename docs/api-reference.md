@@ -122,15 +122,15 @@ GET /api/npc_profiles
 ```json
 [
   {
-    "npc_id":       "npc_alice",
-    "name":         "Alice",
-    "title":        "铁匠",
-    "backstory":    "从小在矿区长大，精通金属冶炼...",
-    "personality":  "沉默寡言但极有原则",
-    "goals":        ["积累 50 金币", "制造一把精良工具", "与 Bob 修好关系"],
-    "speech_style": "简洁直接，不废话",
-    "relationships": { "npc_bob": "竞争", "npc_carol": "友好" },
-    "color":        "#4CAF50"
+    "npc_id":       "npc_he",
+    "name":         "禾",
+    "title":        "村里的妈妈",
+    "backstory":    "村里的单亲妈妈，丈夫数年前去世...",
+    "personality":  "温暖包容，保护女儿",
+    "goals":        ["照顾穗", "维持日常生活"],
+    "speech_style": "温柔关心，偶尔过度保护",
+    "relationships": { "npc_sui": "母女", "npc_shi": "被暗恋" },
+    "color":        "#E8A87C"
   }
 ]
 ```
@@ -144,18 +144,18 @@ GET /api/npc_profiles
 **请求**
 
 ```
-PUT /api/npc_profiles/npc_alice
+PUT /api/npc_profiles/npc_he
 Content-Type: application/json
 ```
 
 ```json
 {
-  "npc_id":    "npc_alice",
-  "name":      "Alice",
-  "title":     "草药师",
-  "backstory": "在森林边长大，熟知各种草药的效用...",
-  "goals":     ["采集100株草药", "学会制造药水"],
-  "speech_style": "温柔，喜欢用比喻"
+  "npc_id":    "npc_he",
+  "name":      "禾",
+  "title":     "村里的妈妈",
+  "backstory": "村里的单亲妈妈，温暖地照顾着女儿穗...",
+  "goals":     ["照顾穗", "维持日常"],
+  "speech_style": "温柔关心"
 }
 ```
 
@@ -205,7 +205,7 @@ Content-Type: application/json
 **响应** `200 OK`
 
 ```json
-{ "ok": true, "updated": ["npc_alice", "npc_bob"] }
+{ "ok": true, "updated": ["npc_he", "npc_sui"] }
 ```
 
 ---
@@ -283,7 +283,7 @@ POST /api/saves/delete
 POST /api/saves/delete_memory
 Content-Type: application/json
 
-{ "npc_id": "npc_alice" }
+{ "npc_id": "npc_he" }
 ```
 
 ---
@@ -341,7 +341,7 @@ ws://localhost:8000/ws
 [
   { "x": 10, "y": 10, "t": "o", "e": 1 },
   { "x": 3,  "y": 3,  "t": "r", "r": "s", "q": 8, "mq": 10 },
-  { "x": 7,  "y": 7,  "t": "f", "r": "h", "q": 3, "mq": 5, "n": ["npc_alice"] },
+  { "x": 7,  "y": 7,  "t": "f", "r": "h", "q": 3, "mq": 5, "n": ["npc_he"] },
   { "x": 5,  "y": 5,  "t": "g", "p": 1 }
 ]
 ```
@@ -362,11 +362,11 @@ ws://localhost:8000/ws
 ```json
 [
   {
-    "id":                "npc_alice",
-    "name":              "Alice",
-    "x":                 5,
-    "y":                 5,
-    "color":             "#4CAF50",
+    "id":                "npc_he",
+    "name":              "禾",
+    "x":                 3,
+    "y":                 3,
+    "color":             "#E8A87C",
     "energy":            82,
     "inventory": {
       "wood": 3, "stone": 0, "ore": 1, "food": 2, "gold": 5,
@@ -379,14 +379,14 @@ ws://localhost:8000/ws
     "active_tool":       true,
     "active_rope":       false,
     "pending_proposals": 1,
-    "thought":           "应该去找 Bob 谈交易",
+    "thought":           "应该去找 石 谈交易",
     "profile": {
       "title":         "铁匠",
       "backstory":     "从小在矿区长大...",
       "personality":   "沉默寡言",
       "goals":         ["积累50金", "制造工具"],
       "speech_style":  "简洁直接",
-      "relationships": { "npc_bob": "竞争" }
+      "relationships": { "npc_shi": "竞争" }
     }
   }
 ]
@@ -413,7 +413,7 @@ ws://localhost:8000/ws
   "last_action":  "move",
   "last_message": "",
   "inventory": { "wood": 0, "stone": 0, "ore": 0, "food": 1, "gold": 0, ... },
-  "inbox":        ["[142] Alice 说: 你好！"]
+  "inbox":        ["[142] 禾 说: 你好！"]
 }
 ```
 
@@ -587,7 +587,7 @@ NPC 的每次决策必须返回符合以下结构的 JSON。
 { "action": "move", "dx": 1, "dy": 0, "thought": "向右走，靠近交易所" }
 
 // 说话
-{ "action": "talk", "message": "Bob，你有多余的石头吗？我可以用草药换", "target_id": "npc_bob" }
+{ "action": "talk", "message": "石，你有多余的石头吗？我可以用草药换", "target_id": "npc_shi" }
 
 // 制造工具
 { "action": "craft", "craft_item": "tool", "thought": "有足够的材料了，做把工具提高采集效率" }
@@ -598,21 +598,21 @@ NPC 的每次决策必须返回符合以下结构的 JSON。
 // 激活工具
 { "action": "use_item", "use_item": "tool", "thought": "用工具采集更多资源" }
 
-// 向 Bob 发出提案
+// 向 石 发出提案
 {
   "action": "propose_trade",
-  "target_id": "npc_bob",
+  "target_id": "npc_shi",
   "offer_item": "herb", "offer_qty": 3,
   "request_item": "stone", "request_qty": 2
 }
 
 // 接受提案
-{ "action": "accept_trade", "proposal_from": "npc_bob" }
+{ "action": "accept_trade", "proposal_from": "npc_shi" }
 
 // 反提案（调整条件）
 {
   "action": "counter_trade",
-  "proposal_from": "npc_carol",
+  "proposal_from": "npc_lan",
   "offer_item": "wood", "offer_qty": 2,
   "request_item": "herb", "request_qty": 1
 }
@@ -686,24 +686,24 @@ WebSocket 消息中使用单字母编码压缩地块信息：
 
 | 事件类型 | 额外字段 | 示例 summary |
 |---------|---------|-------------|
-| `npc_spoke` | `message` | `"Alice 说: \"你好！\""` |
-| `npc_moved` | `from_x`, `from_y`, `to_x`, `to_y` | `"Alice 从 (5,5) 移动到 (6,5)"` |
-| `npc_gathered` | `item`, `qty` | `"Bob 采集了 1 个草药"` |
-| `npc_traded` | `offer_item`, `offer_qty`, `request_item`, `request_qty`, `partner` | `"Alice 和 Bob 交换：3木头 换 2石头"` |
-| `npc_rested` | `energy_gain` | `"Carol 休息，体力 +20"` |
-| `npc_slept` | `energy_gain` | `"Dave 睡眠，体力 +50"` |
-| `npc_ate` | `energy_gain` | `"Alice 吃了食物，体力 +30"` |
-| `npc_exchanged` | `item`, `qty`, `gold` | `"Bob 在交易所卖出 5 木头，获得 5 金币"` |
-| `npc_bought_food` | `qty`, `gold_spent` | `"Carol 花 3 金购买了 1 个食物"` |
-| `npc_thought` | `note` | `"Dave 写下笔记"` |
-| `npc_crafted` | `item` | `"Alice 制造了 tool"` |
-| `npc_sold` | `item`, `qty`, `gold`, `price` | `"Bob 按市价卖出 2 ore，获得 12 金"` |
-| `npc_bought` | `item`, `qty`, `gold`, `price` | `"Carol 按市价买入 1 potion，花费 10 金"` |
-| `npc_used_item` | `item`, `effect` | `"Dave 使用了 tool，采集效率提升"` |
-| `trade_proposed` | `from`, `to`, `offer`, `request` | `"Alice 向 Bob 提出：3草药 换 2石头"` |
-| `trade_accepted` | `from`, `to`, `offer`, `request` | `"Bob 接受了 Alice 的提案，交易完成"` |
-| `trade_rejected` | `from`, `to` | `"Carol 拒绝了 Dave 的提案"` |
-| `trade_countered` | `from`, `to`, `new_offer`, `new_request` | `"Alice 反提案：4草药 换 3石头"` |
+| `npc_spoke` | `message` | `"禾 说: \"你好！\""` |
+| `npc_moved` | `from_x`, `from_y`, `to_x`, `to_y` | `"禾 从 (5,5) 移动到 (6,5)"` |
+| `npc_gathered` | `item`, `qty` | `"石 采集了 1 个草药"` |
+| `npc_traded` | `offer_item`, `offer_qty`, `request_item`, `request_qty`, `partner` | `"禾 和 石 交换：3木头 换 2石头"` |
+| `npc_rested` | `energy_gain` | `"岚婆 休息，体力 +20"` |
+| `npc_slept` | `energy_gain` | `"木 睡眠，体力 +50"` |
+| `npc_ate` | `energy_gain` | `"禾 吃了食物，体力 +30"` |
+| `npc_exchanged` | `item`, `qty`, `gold` | `"石 在交易所卖出 5 木头，获得 5 金币"` |
+| `npc_bought_food` | `qty`, `gold_spent` | `"岚婆 花 3 金购买了 1 个食物"` |
+| `npc_thought` | `note` | `"山 写下笔记"` |
+| `npc_crafted` | `item` | `"木 制造了 tool"` |
+| `npc_sold` | `item`, `qty`, `gold`, `price` | `"旷 按市价卖出 2 ore，获得 12 金"` |
+| `npc_bought` | `item`, `qty`, `gold`, `price` | `"棠 按市价买入 1 potion，花费 10 金"` |
+| `npc_used_item` | `item`, `effect` | `"山 使用了 tool，采集效率提升"` |
+| `trade_proposed` | `from`, `to`, `offer`, `request` | `"禾 向 石 提出：3草药 换 2石头"` |
+| `trade_accepted` | `from`, `to`, `offer`, `request` | `"石 接受了 禾 的提案，交易完成"` |
+| `trade_rejected` | `from`, `to` | `"旷 拒绝了 棠 的提案"` |
+| `trade_countered` | `from`, `to`, `new_offer`, `new_request` | `"禾 反提案：4草药 换 3石头"` |
 | `market_updated` | `changes` | `"市场价格已更新"` |
 | `weather_changed` | `weather` | `"天气变为 暴风雨"` |
 | `resource_spawned` | `resource_type`, `x`, `y`, `qty` | `"God 在 (8,12) 刷新了 5 个草药"` |

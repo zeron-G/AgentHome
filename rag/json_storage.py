@@ -3,8 +3,8 @@
 Storage layout:
     saves/
         memories/
-            npc_alice.json    ← list of MemoryRecord dicts
-            npc_bob.json
+            npc_he.json       ← list of MemoryRecord dicts
+            npc_sui.json
             ...
         world_state.json      ← latest game state snapshot
         events.json           ← recent global events log

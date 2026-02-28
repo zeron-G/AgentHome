@@ -80,10 +80,11 @@ class NPCAgent(BaseAgent):
 
             npc.goal = result.goal.strip()
             npc.plan = [s.strip() for s in result.steps if s.strip()]
+            npc.mood = result.mood.strip() if result.mood else ""
             npc.strategy_tick = world.time.tick
             logger.info(
                 f"[{npc.name}] NEW STRATEGY goal='{npc.goal[:50]}' "
-                f"steps={len(npc.plan)}"
+                f"mood='{npc.mood}' steps={len(npc.plan)}"
             )
         except Exception as e:
             logger.warning(f"[{npc.name}] strategy refresh error: {e}")
@@ -197,6 +198,8 @@ class NPCAgent(BaseAgent):
             self._advance_plan_if_needed(npc, npc.last_action)
 
             # ── Layer 3: Execution ────────────────────────────────────────
+            # Note: last_action_result is read during context building below,
+            # then cleared by world_manager after the next action executes.
             rag_memories = self._retrieve_memories(npc, world)
 
             # Compute situation flags once; pass to both builders

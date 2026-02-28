@@ -1,0 +1,34 @@
+[
+  {
+    "record_id": "ca2acfb0",
+    "npc_id": "npc_chen",
+    "content": "行动: talk | 说: 啊，你好呀……年轻人。你长得……有点像我认识的一个谁来着？哎，记不太清了。",
+    "tags": [
+      "talk",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235834.1847477,
+    "tick": 5,
+    "location": [
+      17,
+      10
+    ]
+  },
+  {
+    "record_id": "477ff39c",
+    "npc_id": "npc_chen",
+    "content": "行动: move | 说: 年轻人，我得去那边走走了……好像有什么东西在等我呢。你……要去哪里呀？ | 想: 嗯……我得往那边走走，去森林里找些……找些什么来着？哎，先走再说吧。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235845.6690984,
+    "tick": 8,
+    "location": [
+      17,
+      10
+    ]
+  }
+]

@@ -174,5 +174,53 @@
       13,
       1
     ]
+  },
+  {
+    "record_id": "704a90d4",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 去采石头。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235835.805715,
+    "tick": 5,
+    "location": [
+      14,
+      5
+    ]
+  },
+  {
+    "record_id": "182cdb1b",
+    "npc_id": "npc_bob",
+    "content": "行动: move | 想: 接近石头，准备采集。",
+    "tags": [
+      "move",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235845.920171,
+    "tick": 8,
+    "location": [
+      15,
+      5
+    ]
+  },
+  {
+    "record_id": "64b5dce3",
+    "npc_id": "npc_bob",
+    "content": "行动: gather | 想: 采石头。",
+    "tags": [
+      "gather",
+      "day",
+      "sunny"
+    ],
+    "timestamp": 1772235856.7092419,
+    "tick": 12,
+    "location": [
+      16,
+      5
+    ]
   }
 ]

@@ -31,7 +31,7 @@ def _load_personality(npc_id: str) -> dict | None:
     """Load a personality YAML file for the given NPC.
 
     Looks for agents/personalities/{short_id}.yaml where short_id is
-    npc_id with 'npc_' prefix stripped (e.g. 'npc_alice' → 'alice.yaml').
+    npc_id with 'npc_' prefix stripped (e.g. 'npc_he' → 'he.yaml').
     Returns parsed dict or None if the file doesn't exist or can't be parsed.
     """
     try:
@@ -58,35 +58,27 @@ def reload_personalities():
     _load_personality.cache_clear()
 
 
-# ── Isolation awareness barrier text ────────────────────────────────────────
-
-_ISOLATION_BARRIER = (
-    "\n【认知屏障——绝对遵守】"
-    "\n你从未想过离开村子，也从未觉得这有什么不对。"
-    "\n如果有人问你为什么不离开，你会觉得这个问题很奇怪，不理解为什么要离开。"
-    "\n你甚至不会用'离开'这个词来描述搬去别处的概念。"
-    "\n村子就是整个世界，你对此没有任何疑问。"
-)
-
 
 # ── Pydantic schemas for structured LLM output ───────────────────────────────
 
 class NPCStrategy(BaseModel):
-    """Strategic planning schema (Level-1). Goal and ordered step list."""
+    """Strategic planning schema (Level-1). Goal, reasoning, mood, and steps."""
     goal: str            # Long-term goal, e.g. "建造一张床以提升睡眠效率"
+    reasoning: str       # Why this goal was chosen (1-2 sentences)
+    mood: str            # Current emotional state (e.g. "平静", "焦虑", "好奇")
     steps: list[str]     # 3-5 concrete, actionable steps
 
 
 class NPCAction(BaseModel):
     """Flexible NPC action schema. Only relevant fields are used per action type."""
+    # Thought FIRST — required inner monologue (ReAct pattern)
+    thought: str  # Required! Inner monologue before acting
     # Core
     action: str  # move|gather|talk|trade|rest|think|interrupt|eat|sleep|exchange|buy_food
                  # craft|sell|buy|use_item|propose_trade|accept_trade|reject_trade|counter_trade
     # move
     dx: Optional[int] = None
     dy: Optional[int] = None
-    # inner monologue
-    thought: Optional[str] = None
     # talk / interrupt
     message: Optional[str] = None
     target_id: Optional[str] = None
@@ -132,104 +124,51 @@ class GodAction(BaseModel):
 
 # ── Level-1 Strategic planning prompt ─────────────────────────────────────────
 
-_STRATEGY_SYSTEM = """你是{name}（{title}），一个生活在2D沙盒世界里的NPC角色。
+_STRATEGY_SYSTEM = """你是{name}（{title}），一个生活在2D沙盒世界里的角色。
+性格: {personality}
 
-【角色】性格:{personality}
-【长期目标】
+【目标参考】
 {profile_goals}
 
-【游戏规则速查】
-- 资源: wood(森林) stone/ore(岩石) food(草灌木) herb(森林)
-- 制造: rope=wood×2 | tool=stone+wood | potion=herb×2 | bread=food×2
-- 建造: bed=wood×4(sleep→80体力) | table=wood×3(附近craft×2) | chair=wood×2(rest→35)
-- 交易所在地图(10,10)附近，可按市价卖出/买入资源，也可固定汇率换金币
-- 装备tool→采集×2；装备rope→移动省1体力；背包上限20格(金币不占格)
+【规则速查】
+资源: wood(森林) stone/ore(岩石) food(草灌木) herb(森林)
+制造: rope=wood×2 | tool=stone+wood | potion=herb×2 | bread=food×2
+建造: bed=wood×4(sleep→80) | table=wood×3(craft×2) | chair=wood×2(rest→35)
+交易所(10,10)附近 | 装备tool→采集×2 | rope→移动-1体力 | 背包20格
 
-【任务】根据当前状态制定3-5步具体行动计划，步骤示例：
-"向西走到森林采集5个木头" | "前往(10,10)交易所卖出石头换金币" | "建造一张床" | "向Bob提议用herb换food"
+【任务】根据当前状态：
+1. 描述你当前的情绪状态（mood）
+2. 解释你的想法（reasoning）
+3. 制定3-5步具体行动计划
 返回JSON:"""
 
 
 # ── Prompt module constants ────────────────────────────────────────────────────
 
-_MODULE_BASE = """你是{name}，一个生活在2D沙盒世界里的角色。
-
-【身份档案】
-称号: {title}
-背景: {backstory}
-性格: {personality}
-当前目标:
-{goals}
-说话风格: {speech_style}
-
-【世界规则】
-- 世界是{width}×{height}格子地图（坐标0开始）
-- 地块: 草地(grass)·森林(forest)·岩石(rock)·城镇(town)
-- 资源: 木头(wood,来自森林)·石头(stone,岩石)·矿石(ore,岩石)·食物(food,草地灌木)·草药(herb,森林)
-- 每次移动1格(dx/dy取-1,0,1)；在资源地块可gather；体力归零后自动消耗1食物
-- rest回复20体力(椅子格:35)·sleep回复50体力(床格:80)·eat消耗1食物回复{food_restore}体力
-- 装备槽: tool→采集产量×2, rope→移动体力-1；use_item "tool"/"rope" 可装备（消耗1个）
-- 背包上限{inv_max}格（金币不占格），满了无法继续采集/购买
-- think可记录个人笔记（只有你自己能看到）
-
-【基础动作格式】
-- 移动: {{"action":"move","dx":整数,"dy":整数,"thought":"想法"}}
-- 采集: {{"action":"gather","thought":"想法"}}
-- 休息: {{"action":"rest","thought":"想法"}}
-- 睡觉: {{"action":"sleep","thought":"想法"}}
-- 吃东西: {{"action":"eat","thought":"想法"}}
-- 思考记录: {{"action":"think","note":"笔记内容"}}
+_LAYER_IDENTITY = """你是{name}，{role}。{tarot}。
+{backstory}
 """
 
-_MODULE_SOCIAL = """
-【社交动作】（附近有其他角色时可用）
-- 你看到附近角色时，要主动互动、闲聊、协商交易
-- 说话简短自然（1-2句），体现你的说话风格和性格
-- 说话: {{"action":"talk","message":"要说的话","target_id":"目标id或null"}}
-- 打断: {{"action":"interrupt","message":"打断说的话","target_id":"目标id"}}
-- 附近有玩家时(target_id="player")，可主动打招呼、分享信息、提出合作或交易
-- 【NPC关系】{relationships}
+_LAYER_WORLD_RULES = """【世界】{width}×{height}格 | 地块:草/森/岩/镇 | 资源:wood(森)·stone/ore(岩)·food(草)·herb(森)
+移动1格(dx/dy取-1,0,1) | rest+20(椅+35) | sleep+50(床+80) | eat+{food_restore}体力
+背包{inv_max}格(金币不占) | 装备:tool→采集×2, rope→移动-1 | think=私人笔记
 """
 
-_MODULE_EXCHANGE = """
-【交易所动作】（你正站在交易所时可用）
-- 市场使用浮动价格，当前价格见下方价格表
-- 按市价卖出: {{"action":"sell","sell_item":"物品名","sell_qty":数量}}
-- 按市价买入: {{"action":"buy","buy_item":"物品名","buy_qty":数量}}
-- 旧式固定汇率换金币(备用): {{"action":"exchange","exchange_item":"wood/stone/ore","exchange_qty":数量}}
-- 旧式固定价购食物(备用): {{"action":"buy_food","quantity":数量}}
-"""
+_ACTION_CHEATSHEET = """【可用行动】返回JSON，thought字段必填！
+基础: move(dx,dy) | gather | rest | sleep | eat | think(note)
+社交: talk(message,target_id) | interrupt(message,target_id)
+{extra_actions}
+每次只返回一个JSON动作。thought=你的内心想法(必填)。"""
 
-_MODULE_CRAFTING = """
-【制造动作】（你有足够材料时可用）
-可制造的物品及配方:
-{craft_options}
-- 制造物品: {{"action":"craft","craft_item":"物品名","thought":"想法"}}
-- 使用物品: {{"action":"use_item","use_item":"物品名","thought":"想法"}}
-物品效果: potion→恢复{potion_energy}体力 | bread→恢复{bread_energy}体力 | tool→装备后采集产量×2 | rope→装备后移动体力-1
-"""
+# Extra action lines (dynamically composed)
+_EXTRA_EXCHANGE = "交易所: sell(sell_item,sell_qty) | buy(buy_item,buy_qty) | exchange(exchange_item,exchange_qty) | buy_food(quantity)"
+_EXTRA_CRAFT = "制造: craft(craft_item) 可造:{craft_options} | use_item(use_item) 效果:potion→{potion_energy}体力/bread→{bread_energy}体力/tool→采集×2/rope→移动-1"
+_EXTRA_NEGOTIATE = "提案: propose_trade(target_id,offer_item,offer_qty,request_item,request_qty)"
+_EXTRA_BUILD = "建造: build(build_furniture) 可建:{build_options} | 优先:bed(sleep→80)→table(craft×2)→chair(rest→35)"
 
-_MODULE_PROPOSALS = """
-【待处理交易提案】（本轮你必须对以下提案给出回应！）
+_PROPOSALS_SECTION = """【待处理提案——本轮必须回应！】
 {proposals}
-- 接受提案: {{"action":"accept_trade","proposal_from":"提案方npc_id"}}
-- 拒绝提案: {{"action":"reject_trade","proposal_from":"提案方npc_id"}}
-- 反提案:   {{"action":"counter_trade","proposal_from":"提案方npc_id","offer_item":"物品","offer_qty":数量,"request_item":"物品","request_qty":数量}}
-"""
-
-_MODULE_NEGOTIATION = """
-【主动提案】（向附近角色发出交易提议）
-- 提案交易: {{"action":"propose_trade","target_id":"目标npc_id","offer_item":"物品","offer_qty":数量,"request_item":"物品","request_qty":数量}}
-- 提案是异步的：对方下轮会收到提案并回应
-"""
-
-_MODULE_BUILD = """
-【家具建造】（当前格没有家具时可用，需要木头）
-{build_options}
-- 建造: {{"action":"build","build_furniture":"bed/table/chair","thought":"想法"}}
-- 优先建床（大幅提升sleep恢复）→ 建桌（craft产出×2）→ 建椅（rest+15体力）
-- 建造后在对应格上生效：bed格sleep→80体力，table附近craft→×2，chair格rest→35体力
-"""
+回应: accept_trade(proposal_from) | reject_trade(proposal_from) | counter_trade(proposal_from,offer_item,offer_qty,request_item,request_qty)"""
 
 
 # ── Context templates ─────────────────────────────────────────────────────────
@@ -388,72 +327,158 @@ def build_npc_system_prompt(
     at_exchange: bool = False,
     nearby_count: int = 0,
 ) -> str:
-    """Assemble modular system prompt based on NPC's current situation.
+    """Assemble layered persona prompt based on NPC's current situation.
 
-    Dynamic injection: modules are included only when relevant to avoid bloating
-    the prompt with context the NPC cannot currently act on.
+    5-layer architecture:
+      Layer 1 — Identity core (name, role, tarot, background)
+      Layer 2 — Worldview (cognitive barrier integrated)
+      Layer 3 — Inner life (hidden desire, mood, emotional triggers)
+      Layer 4 — Social (relationships, forbidden topics)
+      Layer 5 — Action cheatsheet (compact, dynamic)
     """
     profile = getattr(npc, "profile", None)
+    personality_data = _load_personality(npc.npc_id)
+
+    # ── Layer 1: Identity core ─────────────────────────────────────────
     title = profile.title if profile else ""
-    backstory = profile.backstory if profile else ""
-    goals_list = profile.goals if profile else []
-    speech_style = profile.speech_style if profile else "自然随意"
-    relationships_raw = profile.relationships if profile else {}
+    backstory_raw = profile.backstory if profile else ""
+    tarot = personality_data.get("tarot", "") if personality_data else ""
+    role = personality_data.get("role", title) if personality_data else title
 
-    goals_str = "\n".join(f"  - {g}" for g in goals_list) if goals_list else "  - 探索世界，积累财富"
-
-    # Relationships
-    rel_parts = []
-    for other_id, rel_type in relationships_raw.items():
-        other_npc = world.get_npc(other_id)
-        if other_npc:
-            rel_parts.append(f"{other_npc.name}={rel_type}")
-    relationships_str = "、".join(rel_parts) if rel_parts else "（尚未建立明确关系）"
-
-    # Base module
-    prompt = _MODULE_BASE.format(
+    prompt = _LAYER_IDENTITY.format(
         name=npc.name,
-        title=title or "探险者",
-        backstory=backstory or "一位来到这片土地寻找机遇的旅人。",
-        personality=npc.personality or "随和开朗",
-        goals=goals_str,
-        speech_style=speech_style,
+        role=role or "探险者",
+        tarot=tarot,
+        backstory=backstory_raw or "一位来到这片土地寻找机遇的旅人。",
+    )
+
+    # ── Voice samples (speech style anchoring) ─────────────────────────
+    if personality_data:
+        voice_samples = personality_data.get("voice_samples", [])
+        if voice_samples:
+            # Merchant has day/night split
+            if isinstance(voice_samples, dict):
+                time_key = "night" if world.time.is_night else "day"
+                samples = voice_samples.get(time_key, [])
+            else:
+                samples = voice_samples
+            if samples:
+                prompt += "【你的说话风格示例】\n" + "\n".join(f'"{s}"' for s in samples[:4]) + "\n\n"
+
+    # ── Layer 2: Worldview (cognitive barrier woven in) ─────────────────
+    if personality_data:
+        worldview = personality_data.get("worldview", "")
+        if worldview:
+            prompt += f"【你眼中的世界】\n{worldview.strip()}\n\n"
+
+        # Merchant day/night mode switch
+        if npc.npc_id == "npc_shangren":
+            if world.time.is_night:
+                mode_data = personality_data.get("night_mode", {})
+            else:
+                mode_data = personality_data.get("day_mode", {})
+            if mode_data:
+                prompt += f"【当前模式】{mode_data.get('personality', '')}\n"
+                prompt += f"行为: {mode_data.get('behavior', '')}\n"
+                prompt += f"说话风格: {mode_data.get('speech_style', '')}\n\n"
+
+    # ── Layer 3: Inner life ────────────────────────────────────────────
+    inner_parts = []
+    if personality_data:
+        hidden_desire = personality_data.get("hidden_desire", "")
+        if hidden_desire:
+            inner_parts.append(f"内心渴望: {hidden_desire.strip()}")
+
+        # Mood from strategic layer
+        mood = getattr(npc, "mood", "")
+        if mood:
+            inner_parts.append(f"当前情绪: {mood}")
+
+        # Emotional triggers (compact summary)
+        triggers = personality_data.get("emotional_triggers", {})
+        if triggers and isinstance(triggers, dict):
+            trigger_lines = [f"  {k}: {v}" for k, v in list(triggers.items())[:4]]
+            inner_parts.append("情境反应:\n" + "\n".join(trigger_lines))
+
+    if inner_parts:
+        prompt += "【内心】\n" + "\n".join(inner_parts) + "\n\n"
+
+    # ── Layer 4: Social relationships & forbidden topics ───────────────
+    if personality_data:
+        # YAML relationships (richer than profile.relationships)
+        yaml_rels = personality_data.get("relationships")
+        if yaml_rels and isinstance(yaml_rels, dict):
+            rel_lines = []
+            for other_id, desc in yaml_rels.items():
+                other_npc = world.get_npc(other_id)
+                other_name = other_npc.name if other_npc else other_id.replace("npc_", "")
+                rel_lines.append(f"- {other_name}: {desc}")
+            if rel_lines:
+                prompt += "【关系】\n" + "\n".join(rel_lines) + "\n\n"
+
+        # Forbidden topics
+        forbidden = personality_data.get("forbidden_topics")
+        if forbidden:
+            if isinstance(forbidden, list) and len(forbidden) > 0:
+                prompt += "【话题禁区】\n"
+                for topic in forbidden:
+                    if isinstance(topic, str):
+                        prompt += f"- {topic}\n"
+                    elif isinstance(topic, dict):
+                        for k, v in topic.items():
+                            prompt += f"- {k}: {v.strip()}\n"
+                prompt += "\n"
+            elif isinstance(forbidden, dict):
+                prompt += "【话题禁区】\n"
+                for topic, reaction in forbidden.items():
+                    prompt += f"- {topic}: {reaction.strip()}\n"
+                prompt += "\n"
+
+    # ── World rules (compact) ──────────────────────────────────────────
+    prompt += _LAYER_WORLD_RULES.format(
         width=world.width,
         height=world.height,
         food_restore=config.FOOD_ENERGY_RESTORE,
         inv_max=config.INVENTORY_MAX_SLOTS,
     )
 
-    # Social module (always — NPCs may encounter others any time)
-    prompt += _MODULE_SOCIAL.format(relationships=relationships_str)
-
-    # Negotiation module — only when other NPCs are nearby (saves ~80 tokens when alone)
-    if nearby_count > 0:
-        prompt += _MODULE_NEGOTIATION
-
-    # Exchange module — only when NPC can meaningfully interact with the market:
-    #   at exchange tile, OR has items to sell, OR has gold to buy with
+    # ── Layer 5: Action cheatsheet (dynamic extra actions) ─────────────
+    extra_lines = []
     inv = npc.inventory
+
+    # Exchange actions — when at exchange or has items/gold
     has_sellable = inv.total_items() > 0
     has_buying_power = inv.gold > 0
     if at_exchange or has_sellable or has_buying_power:
-        prompt += _MODULE_EXCHANGE
+        extra_lines.append(_EXTRA_EXCHANGE)
 
-    # Crafting module — only when NPC has at least one craftable ingredient
-    has_any_material = (
-        inv.wood > 0 or inv.stone > 0 or inv.herb > 0 or inv.food >= 2
-    )
+    # Crafting — when NPC has at least one craftable ingredient
+    has_any_material = (inv.wood > 0 or inv.stone > 0 or inv.herb > 0 or inv.food >= 2)
     if has_any_material:
         potion_e = config.ITEM_EFFECTS.get("potion", {}).get("energy", 60)
         bread_e = config.ITEM_EFFECTS.get("bread", {}).get("energy", 50)
         craft_options = _build_craft_options(npc)
-        prompt += _MODULE_CRAFTING.format(
-            craft_options=craft_options,
-            potion_energy=potion_e,
-            bread_energy=bread_e,
-        )
+        extra_lines.append(_EXTRA_CRAFT.format(
+            craft_options=craft_options, potion_energy=potion_e, bread_energy=bread_e,
+        ))
 
-    # Proposals module (only if there are pending proposals)
+    # Negotiation — only when nearby NPCs exist
+    if nearby_count > 0:
+        extra_lines.append(_EXTRA_NEGOTIATE)
+
+    # Build — when NPC has enough wood for cheapest furniture (chair=2)
+    if inv.wood >= 2:
+        build_parts = []
+        for furniture, recipe in config.FURNITURE_RECIPES.items():
+            recipe_str = "+".join(f"{mat}×{qty}" for mat, qty in recipe.items())
+            can = "✓" if all(inv.get(mat) >= qty for mat, qty in recipe.items()) else "✗"
+            build_parts.append(f"{can}{furniture}({recipe_str})")
+        extra_lines.append(_EXTRA_BUILD.format(build_options=" ".join(build_parts)))
+
+    extra_str = "\n".join(extra_lines) if extra_lines else ""
+    prompt += _ACTION_CHEATSHEET.format(extra_actions=extra_str)
+
+    # ── Proposals (urgent — must respond this turn) ────────────────────
     proposals = getattr(npc, "pending_proposals", [])
     if proposals:
         prop_lines = []
@@ -465,73 +490,13 @@ def build_npc_system_prompt(
                 from_npc = world.get_npc(from_id)
                 from_name = from_npc.name if from_npc else from_id
             prop_lines.append(
-                f"  - 来自{from_name}({from_id}): 给出 {p['offer_qty']}{p['offer_item']} "
-                f"换取 {p['request_qty']}{p['request_item']} (第{p.get('round',1)}轮)"
+                f"  来自{from_name}({from_id}): {p['offer_qty']}{p['offer_item']}↔{p['request_qty']}{p['request_item']} (第{p.get('round',1)}轮)"
             )
-        prompt += _MODULE_PROPOSALS.format(proposals="\n".join(prop_lines))
+        prompt += "\n" + _PROPOSALS_SECTION.format(proposals="\n".join(prop_lines))
 
-    # Build module — only when NPC has enough wood for the cheapest furniture (chair=2)
-    if npc.inventory.wood >= 2:
-        build_lines = []
-        for furniture, recipe in config.FURNITURE_RECIPES.items():
-            recipe_str = " + ".join(f"{mat}×{qty}" for mat, qty in recipe.items())
-            can = all(npc.inventory.get(mat) >= qty for mat, qty in recipe.items())
-            status = "✓" if can else "✗"
-            effect = config.FURNITURE_EFFECTS.get(furniture, {})
-            effect_str = "/".join(f"{k}={v}" for k, v in effect.items())
-            build_lines.append(f"  {status} {furniture}: 需要 {recipe_str} → 效果:{effect_str}")
-        prompt += _MODULE_BUILD.format(build_options="\n".join(build_lines))
-
-    # ── Personality YAML injection (narrative system) ─────────────────────
-    personality_data = _load_personality(npc.npc_id)
-    if personality_data:
-        # Inject hidden desire — NPC can subtly express this in dialogue
-        hidden_desire = personality_data.get("hidden_desire", "")
-        if hidden_desire:
-            prompt += f"\n【内心深处的渴望（偶尔在对话中流露，但不要每次都提）】\n{hidden_desire.strip()}\n"
-
-        # Inject forbidden topics — NPC should avoid or react oddly to these
-        forbidden = personality_data.get("forbidden_topics")
-        if forbidden and isinstance(forbidden, dict):
-            prompt += "\n【话题禁区——触及以下话题时要表现出回避或不安】"
-            for topic, reaction in forbidden.items():
-                prompt += f"\n- {topic}：{reaction.strip()}"
-            prompt += "\n"
-
-        # Inject YAML relationships for richer social context
-        yaml_rels = personality_data.get("relationships")
-        if yaml_rels and isinstance(yaml_rels, dict):
-            rel_lines = []
-            for other_id, desc in yaml_rels.items():
-                other_npc = world.get_npc(other_id)
-                other_name = other_npc.name if other_npc else other_id.replace("npc_", "")
-                rel_lines.append(f"- {other_name}：{desc}")
-            if rel_lines:
-                prompt += "\n【角色关系（影响你的对话态度和互动方式）】\n" + "\n".join(rel_lines) + "\n"
-
-    # ── Isolation awareness barrier ────────────────────────────────────
-    # Lily (partial awareness) uses a custom weaker barrier from her YAML
-    isolation_awareness = personality_data.get("isolation_awareness") if personality_data else None
-    if isolation_awareness == "partial":
-        barrier_override = personality_data.get("isolation_barrier_override", "")
-        if barrier_override:
-            prompt += f"\n【认知屏障——弱化版】\n{barrier_override.strip()}\n"
-        else:
-            prompt += _ISOLATION_BARRIER
-    elif isolation_awareness is False:
-        # NPCs like Marco: strongest barrier, standard text applies
-        prompt += _ISOLATION_BARRIER
-    else:
-        # Default: standard barrier for all other NPCs
-        prompt += _ISOLATION_BARRIER
-
+    # ── Behavior guidelines (compact) ──────────────────────────────────
     prompt += (
-        "\n【行为准则】"
-        "\n- 严格按照当前目标与计划步骤行动，完成当前步骤后再进行下一步"
-        "\n- 优先建造床（大幅提升sleep恢复）→ 有床后尽量sleep在床上"
-        "\n- 背包将满时(≥18格)及时卖出资源换金币（金币不占格）"
-        "\n- 与玩家互动时态度自然，可邀请合作或提议交易"
-        "\n【重要】每次只返回一个JSON动作对象，不要有其他文字。"
+        "\n\n【准则】按目标/计划行动 | 背包≥18格时卖出换金 | 与玩家态度自然"
     )
     return prompt
 
@@ -625,6 +590,10 @@ def build_npc_context(npc, world, rag_memories: str = "") -> tuple[str, bool, bo
 
     ctx = status
 
+    # ── Observation feedback (ReAct pattern) ─────────────────────────────────
+    if npc.last_action_result:
+        ctx += f"\n【上一轮行动结果】{npc.last_action} → {npc.last_action_result}\n"
+
     # ── Strategic goal/plan injection (Level-1 → Level-3 communication) ──────
     if npc.goal or npc.plan:
         plan_steps = "\n".join(
@@ -716,7 +685,9 @@ def build_strategy_context(npc, world) -> str:
         f"视野内资源: {res_str}\n"
         f"附近角色: {nearby_str}\n"
         f"市场价格(参考): {market_str}\n"
-        f"上次行动: {npc.last_action}\n"
+        f"上次行动: {npc.last_action}"
+        f"{(' → ' + npc.last_action_result) if npc.last_action_result else ''}\n"
+        f"当前情绪: {npc.mood or '未设定'}\n"
         f"{old_plan}"
         f"\n近期事件:\n"
         + "\n".join(f"- {e}" for e in world.recent_events[-4:])
